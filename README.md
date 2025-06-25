@@ -68,18 +68,16 @@ end
 ### Working with translations
 
 ```elixir
-alias GettextMapper.Ecto.Type.Translated
-
 # Casting input in changesets
 changeset =
   %MyApp.Post{}
   |> Ecto.Changeset.cast(%{title: %{"en" => "Hello", "nb" => "Hei"}}, [:title])
 
 # Localize for current locale
-Translated.localize(changeset.changes.title, "Default text")
+GettextMapper.localize(changeset.changes.title, "Default text")
 
 # Translate for a specific locale
-Translated.translate(changeset.changes.title, "en")
+GettextMapper.translate(changeset.changes.title, "en")
 ```
 
 ## Testing

@@ -46,39 +46,10 @@ defmodule GettextMapper.Ecto.Type.TranslatedTest do
     end
   end
 
-  describe "localize/2" do
-    test "with nb locale" do
-      map = %{"en" => "Hello", "nb" => "Hallo"}
-      assert "Hallo" == localize(map, "Default")
-    end
-
-    test "fallback to default locale when current not present" do
-      map = %{"en" => "Hello"}
-      assert "Hello" == localize(map, "Default")
-    end
-
-    test "fallback to default" do
-      assert "Default" == localize(%{"da" => "Hej"}, "Default")
-    end
-
-    test "empty string for nil and default empty" do
-      assert "" == localize(nil)
-    end
-  end
-
-  describe "translate/2" do
-    test "gets value by locale" do
-      map = %{"en" => "Hello", "nb" => "Hallo"}
-      assert "Hallo" == translate(map, "nb")
-    end
-
-    test "fallback to default locale" do
-      map = %{"en" => "Hello"}
-      assert "Hello" == translate(map, "nb")
-    end
-
-    test "fallback to NO TRANSLATION" do
-      assert "NO TRANSLATION" == translate(%{"da" => "Hej"}, "nb")
+  describe ".localize/2 and .translate/2 have been moved to GettextMapper module" do
+    test "module no longer defines localize/2 or translate/2" do
+      refute function_exported?(GettextMapper.Ecto.Type.Translated, :localize, 2)
+      refute function_exported?(GettextMapper.Ecto.Type.Translated, :translate, 2)
     end
   end
 end

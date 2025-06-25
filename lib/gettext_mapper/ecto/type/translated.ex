@@ -41,36 +41,6 @@ defmodule GettextMapper.Ecto.Type.Translated do
   def dump(value) when is_map(value), do: {:ok, value}
   def dump(_), do: :error
 
-  @doc """
-  Gets the localized string from the translations map for the current locale.
-
-  Falls back to the default locale, then to the given default value.
-  """
-  def localize(nil, _default \\ ""), do: ""
-
-  def localize(value, default) when is_map(value) do
-    value[locale()] || value[default_locale()] || default
-  end
-
-  @doc """
-  Fetches the translation for the given locale.
-
-  Falls back to the default locale, then returns "NO TRANSLATION" if
-  none are found.
-  """
-  def translate(values, locale) when is_map(values) do
-    cond do
-      str = Map.get(values, locale) ->
-        str
-
-      str = Map.get(values, default_locale()) ->
-        str
-
-      true ->
-        "NO TRANSLATION"
-    end
-  end
-
   defp gettext_module do
     Application.get_env(:gettext_mapper, :gettext) ||
       raise """
@@ -81,13 +51,5 @@ defmodule GettextMapper.Ecto.Type.Translated do
 
   defp supported_locales do
     gettext_module().known_locales()
-  end
-
-  defp locale do
-    gettext_module().get_locale()
-  end
-
-  defp default_locale do
-    gettext_module().default_locale()
   end
 end
