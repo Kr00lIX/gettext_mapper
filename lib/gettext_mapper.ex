@@ -20,14 +20,17 @@ defmodule GettextMapper do
   @doc """
   Fetches the translation for the specified locale from a translations map.
 
-  Falls back to the default locale, then returns "NO TRANSLATION" if none found.
+  Falls back to the default locale, then to the configured default translation
+  message if none is found.
+  The default message can be set via the `:default_translation` config
+  (defaults to "NO TRANSLATION").
   """
   @spec translate(map(), String.t()) :: String.t()
   def translate(values, locale) when is_map(values) do
     cond do
       str = Map.get(values, locale) -> str
       str = Map.get(values, default_locale()) -> str
-      true -> "NO TRANSLATION"
+      true -> default_translation()
     end
   end
 
@@ -41,4 +44,9 @@ defmodule GettextMapper do
   defp locale, do: gettext_module().get_locale()
 
   defp default_locale, do: gettext_module().default_locale()
+
+  # Retrieves the default translation message from config, defaulting to "NO TRANSLATION".
+  defp default_translation do
+    Application.get_env(:gettext_mapper, :default_translation, "NO TRANSLATION")
+  end
 end

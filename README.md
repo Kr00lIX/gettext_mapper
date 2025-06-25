@@ -4,7 +4,7 @@
 # GettextMapper: Ecto.Type for localized JSON translations
 
 [![Hex.pm](https://img.shields.io/hexpm/v/gettext_mapper.svg)](https://hex.pm/packages/gettext_mapper)
-[![Coverage Status](https://coveralls.io/repos/github/kr00lix/gettext_mapper/badge.svg?branch=master)](https://coveralls.io/github/kr00lix/gettext_mapper?branch=master)
+[![Coverage Status](https://coveralls.io/repos/github/kr00lix/gettext_mapper/badge.svg?branch=main)](https://coveralls.io/github/kr00lix/gettext_mapper?branch=main)
 [![Docs](https://img.shields.io/badge/docs-ExDoc-blue.svg)](https://hexdocs.pm/gettext_mapper)
 
 GettextMapper provides an `Ecto.Type` to store and retrieve translations
@@ -42,11 +42,14 @@ mix deps.get
 
 ## Configuration
 
-In your `config/config.exs`, point to your Gettext backend:
+In your `config/config.exs`, point to your Gettext backend and optionally set
+the default translation message:
 
 ```elixir
 config :gettext_mapper,
-  gettext: MyApp.Gettext
+  gettext: MyApp.Gettext,
+  # Message returned when no translation is found (default: "NO TRANSLATION")
+  default_translation: "N/A"
 ```
 
 Ensure your backend module (e.g. `MyApp.Gettext`) uses `Gettext`.
