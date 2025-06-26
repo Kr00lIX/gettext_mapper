@@ -7,6 +7,23 @@ defmodule GettextMapper do
   Returns the localized string from a translations map for the current locale.
 
   Falls back to the default locale, then to the given default value.
+
+  Examples, when the locale is "de" and default fallback locale is "en":
+
+    # use current locale
+    iex> GettextMapper.localize(%{"en" => "Hello", "de" => "Hallo"}, "missed translation")
+    "Hallo"
+
+    # use fallback locale
+    iex> GettextMapper.localize(%{"en" => "Hello", "nb" => "Hallo"})
+    "Hello"
+
+    iex> GettextMapper.localize(%{"da" => "Hallo", "fr" => "Bonjour"})
+    ""
+
+    # use default translation
+    iex> GettextMapper.localize(%{"da" => "Hallo", "fr" => "Bonjour"}, "Default")
+    "Default"
   """
   @spec localize(map() | nil, String.t()) :: String.t()
   def localize(value, _default \\ "")

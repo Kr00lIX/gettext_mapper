@@ -10,7 +10,7 @@ defmodule GettextMapper.Ecto.Type.TranslatedTest do
 
   describe ".cast" do
     test "expect success cast map" do
-      params = %{"en" => "Hello", "nb" => "Hallo", "da" => "Hej"}
+      params = %{"en" => "Hello", "de" => "Hallo", "uk" => "Привіт"}
       assert {:ok, params} == cast(params)
     end
 

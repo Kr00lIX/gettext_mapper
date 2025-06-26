@@ -3,8 +3,8 @@ ExUnit.start()
 defmodule TestGettext do
   @moduledoc false
   # Simulates a Gettext backend for tests
-  def known_locales, do: ["en", "nb", "da"]
-  def get_locale, do: "nb"
+  def known_locales, do: ["en", "uk", "nb", "de"]
+  def get_locale, do: "de"
   def default_locale, do: "en"
 end
 

@@ -1,9 +1,11 @@
 defmodule GettextMapperTest do
   use ExUnit.Case, async: true
 
+  doctest GettextMapper
+
   describe "localize/2" do
     test "returns current locale value when present" do
-      map = %{"en" => "Hello", "nb" => "Hallo"}
+      map = %{"en" => "Hello", "de" => "Hallo"}
       assert GettextMapper.localize(map, "Default") == "Hallo"
     end
 
@@ -13,7 +15,7 @@ defmodule GettextMapperTest do
     end
 
     test "falls back to default value when no locale matches" do
-      map = %{"da" => "Hej"}
+      map = %{"uk" => "Привіт"}
       assert GettextMapper.localize(map, "Default") == "Default"
     end
 
