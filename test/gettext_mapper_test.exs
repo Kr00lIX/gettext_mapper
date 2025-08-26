@@ -1,10 +1,11 @@
 defmodule GettextMapperTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   doctest GettextMapper
 
   describe "localize/2" do
     test "returns current locale value when present" do
+      Gettext.put_locale(MyGettextApp, "de")
       map = %{"en" => "Hello", "de" => "Hallo"}
       assert GettextMapper.localize(map, "Default") == "Hallo"
     end

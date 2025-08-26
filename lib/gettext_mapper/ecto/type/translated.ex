@@ -17,10 +17,22 @@ defmodule GettextMapper.Ecto.Type.Translated do
   Casts a map of translations.
 
   Keys must be in the list of supported locales defined by the configured
-  Gettext backend.
+  Gettext backend. Values must be strings or nil.
   """
   def cast(params) when is_map(params) do
-    if Enum.all?(Map.keys(params), &(&1 in supported_locales())) do
+    supported = supported_locales()
+
+    # If no locales are configured, accept any reasonable locale strings
+    valid_keys =
+      if Enum.empty?(supported) do
+        Enum.all?(Map.keys(params), &is_binary/1)
+      else
+        Enum.all?(Map.keys(params), &(&1 in supported))
+      end
+
+    valid_values = Enum.all?(Map.values(params), &(is_binary(&1) or is_nil(&1)))
+
+    if valid_keys and valid_values do
       {:ok, params}
     else
       :error
@@ -33,6 +45,7 @@ defmodule GettextMapper.Ecto.Type.Translated do
   Loads a value from the database.
   """
   def load(params) when is_map(params), do: {:ok, params}
+  def load(nil), do: {:ok, nil}
   def load(_), do: :error
 
   @doc """
@@ -41,15 +54,7 @@ defmodule GettextMapper.Ecto.Type.Translated do
   def dump(value) when is_map(value), do: {:ok, value}
   def dump(_), do: :error
 
-  defp gettext_module do
-    Application.get_env(:gettext_mapper, :gettext) ||
-      raise """
-      :gettext_mapper expects a :gettext configuration.
-      Please add `config :gettext_mapper, gettext: MyApp.Gettext` to your config.
-      """
-  end
-
   defp supported_locales do
-    gettext_module().known_locales()
+    GettextMapper.GettextAPI.known_locales()
   end
 end

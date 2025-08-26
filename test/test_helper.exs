@@ -1,12 +1,9 @@
 ExUnit.start()
 
-defmodule TestGettext do
-  @moduledoc false
-  # Simulates a Gettext backend for tests
-  def known_locales, do: ["en", "uk", "nb", "de"]
-  def get_locale, do: "de"
-  def default_locale, do: "en"
+defmodule MyGettextApp do
+  use Gettext.Backend, otp_app: :gettext_mapper, priv: "test/priv/gettext"
 end
 
-# Configure the library to use the test Gettext backend
-Application.put_env(:gettext_mapper, :gettext, TestGettext)
+Application.put_env(:gettext, :default_locale, "en")
+Application.put_env(:gettext_mapper, :gettext, MyGettextApp)
+Application.put_env(:gettext_mapper, :supported_locales, ["en", "de", "uk"])

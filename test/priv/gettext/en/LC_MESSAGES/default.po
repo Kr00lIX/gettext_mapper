@@ -1,0 +1,15 @@
+## This file is a PO Template file.
+##
+## Copyright notices and such is usually here.
+##
+## "msgid"s in this file come from POT (.pot) files.
+##
+msgid ""
+msgstr ""
+"Language: en\n"
+
+msgid "Hello"
+msgstr "Hello!"
+
+msgid "USA"
+msgstr "USA"
