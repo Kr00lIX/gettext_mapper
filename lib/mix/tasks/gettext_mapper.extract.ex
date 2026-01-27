@@ -1,12 +1,13 @@
 defmodule Mix.Tasks.GettextMapper.Extract do
-  @shortdoc "Extract translations from static gettext_mapper maps to populate .po files"
+  @shortdoc "Extract translations from static gettext_mapper maps to populate .po/.pot files"
 
   @moduledoc """
-  Extracts both msgids and translations from static gettext_mapper maps and populates .po files.
+  Extracts both msgids and translations from static gettext_mapper maps and populates .po/.pot files.
 
   This task scans your codebase for `gettext_mapper(%{...})` calls with static maps and:
   1. Extracts the msgid (custom msgid if specified, otherwise default locale message)
-  2. Extracts all translations and populates corresponding .po files with msgstr entries
+  2. Creates/updates .pot template files with all msgids (empty msgstr)
+  3. Extracts all translations and populates corresponding .po files with msgstr entries
 
   ## Examples
 
@@ -336,18 +337,81 @@ defmodule Mix.Tasks.GettextMapper.Extract do
         end
       end)
 
+    # Group msgids by domain for .pot file generation
+    msgids_by_domain =
+      Enum.reduce(grouped_by_msgid_and_domain, %{}, fn {{msgid, domain}, _}, acc ->
+        existing = Map.get(acc, domain, [])
+        Map.put(acc, domain, [msgid | existing])
+      end)
+
+    # Create/update .pot files for each domain
+    Enum.each(msgids_by_domain, fn {domain, msgids} ->
+      update_pot_file(priv_dir, domain, Enum.uniq(msgids), dry_run)
+    end)
+
     # For each msgid/domain combination, update all relevant .po files
     Enum.each(grouped_by_msgid_and_domain, fn {{msgid, domain}, translation_groups} ->
       # Merge all translations for this msgid (in case of duplicates)
       merged_translations = merge_translation_groups(translation_groups)
 
+      # Check if this is a custom msgid (msgid differs from default locale text)
+      default_locale_text = Map.get(merged_translations, default_locale)
+      has_custom_msgid = default_locale_text != nil and default_locale_text != msgid
+
       # Update .po files for each locale
+      # Skip default locale only if msgid equals the default locale text
       Enum.each(merged_translations, fn {locale, msgstr} ->
-        if locale != default_locale do
+        if locale != default_locale or has_custom_msgid do
           update_po_file(priv_dir, locale, domain, msgid, msgstr, dry_run)
         end
       end)
     end)
+  end
+
+  defp update_pot_file(priv_dir, domain, msgids, dry_run) do
+    default_domain = GettextMapper.GettextAPI.default_domain()
+    pot_filename = if domain == default_domain, do: "#{default_domain}.pot", else: "#{domain}.pot"
+    pot_file_path = Path.join(priv_dir, pot_filename)
+
+    if dry_run do
+      Mix.shell().info("Would update #{pot_file_path} with #{length(msgids)} msgid(s)")
+    else
+      ensure_pot_file_exists(pot_file_path)
+
+      Enum.each(msgids, fn msgid ->
+        add_msgid_to_pot(pot_file_path, msgid)
+      end)
+    end
+  end
+
+  defp ensure_pot_file_exists(pot_file_path) do
+    unless File.exists?(pot_file_path) do
+      File.mkdir_p!(Path.dirname(pot_file_path))
+
+      initial_content = """
+      ## POT (Portable Object Template) file
+      ## Extracted from gettext_mapper static translation maps.
+      msgid ""
+      msgstr ""
+      "Content-Type: text/plain; charset=UTF-8\\n"
+      """
+
+      File.write!(pot_file_path, initial_content)
+    end
+  end
+
+  defp add_msgid_to_pot(pot_file_path, msgid) do
+    content = File.read!(pot_file_path)
+
+    # Check if msgid already exists
+    escaped_msgid = Regex.escape(msgid)
+    msgid_pattern = ~r/msgid "#{escaped_msgid}"\s*\nmsgstr ""/s
+
+    unless Regex.match?(msgid_pattern, content) do
+      # Add new msgid with empty msgstr
+      new_entry = "\nmsgid \"#{escape_string(msgid)}\"\nmsgstr \"\"\n"
+      File.write!(pot_file_path, content <> new_entry)
+    end
   end
 
   defp merge_translation_groups(translation_groups) do
@@ -374,11 +438,11 @@ defmodule Mix.Tasks.GettextMapper.Extract do
       File.mkdir_p!(Path.dirname(po_file_path))
 
       initial_content = """
-      # #{locale} translations
+      ## "Language: #{locale}" translations
       msgid ""
       msgstr ""
       "Language: #{locale}\\n"
-
+      "Content-Type: text/plain; charset=UTF-8\\n"
       """
 
       File.write!(po_file_path, initial_content)

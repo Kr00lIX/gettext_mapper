@@ -72,7 +72,7 @@ defmodule MyApp.ProductController do
   use GettextMapper
 
   def index(conn, _params) do
-    page_title = gettext_mapper(%{
+    page_title = lgettext_mapper(%{
       "en" => "Product Catalog",
       "de" => "Produktkatalog", 
       "es" => "Catálogo de Productos"
@@ -119,7 +119,7 @@ defmodule MyApp.AdminPanel do
   use GettextMapper, domain: "admin"
 
   def dashboard_title do
-    gettext_mapper(%{
+    lgettext_mapper(%{
       "en" => "Admin Dashboard",
       "de" => "Verwaltungsdashboard"
     })
