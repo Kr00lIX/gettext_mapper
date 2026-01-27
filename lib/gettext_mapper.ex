@@ -12,6 +12,7 @@ defmodule GettextMapper do
   - **Database Integration**: Store translations as JSON maps in your database
   - **Gettext Compatibility**: Extract messages for translation using standard Gettext tools
   - **Domain Support**: Use Gettext domains for organizing translations by context
+  - **Custom Message IDs**: Use stable keys instead of text as gettext msgid
   - **Automatic Sync**: Keep your code in sync with .po file updates
   - **Ecto Integration**: Built-in Ecto types for storing translations
 
@@ -45,6 +46,34 @@ defmodule GettextMapper do
           gettext_mapper(%{"en" => "Error occurred"}, domain: "errors")
         end
       end
+
+  ## Custom Message IDs
+
+  By default, the default locale's text is used as the msgid in gettext .po files.
+  You can specify a custom msgid to use stable translation keys instead:
+
+      defmodule MyApp.UI do
+        use GettextMapper
+
+        def greeting do
+          # Uses "greeting.hello" as msgid in .po files instead of "Hello"
+          gettext_mapper(%{"en" => "Hello", "de" => "Hallo"}, msgid: "greeting.hello")
+        end
+
+        def error_message do
+          # Combine with domain
+          gettext_mapper(%{"en" => "Error", "de" => "Fehler"},
+            msgid: "error.generic",
+            domain: "errors"
+          )
+        end
+      end
+
+  This creates .po entries like:
+
+      # de/LC_MESSAGES/default.po
+      msgid "greeting.hello"
+      msgstr "Hallo"
 
   ## Database Integration
 
@@ -91,12 +120,20 @@ defmodule GettextMapper do
   @doc """
   Imports GettextMapper macros into the current module.
 
-  ## Options
+  ## Module Options
 
   - `:domain` - The Gettext domain to use for all `gettext_mapper/1` calls in this module.
     Defaults to the configured default domain (usually "default").
   - `:backend` - The Gettext backend module to use for this module.
     Defaults to the globally configured backend.
+
+  ## Per-Call Options
+
+  The `gettext_mapper/2` macro also accepts options at the call level:
+
+  - `:domain` - Override the module domain for this specific call.
+  - `:msgid` - Use a custom message ID instead of the default locale text.
+    This is useful for stable translation keys that don't change when text changes.
 
   ## Examples
 
@@ -133,6 +170,24 @@ defmodule GettextMapper do
 
         def content do
           gettext_mapper(%{"en" => "Custom Content"})
+        end
+      end
+
+      # Use custom msgid for stable translation keys
+      defmodule MyApp.StableKeys do
+        use GettextMapper
+
+        def greeting do
+          # "ui.greeting" will be the msgid in .po files
+          gettext_mapper(%{"en" => "Hello!", "de" => "Hallo!"}, msgid: "ui.greeting")
+        end
+
+        def error do
+          # Combine msgid with domain
+          gettext_mapper(%{"en" => "Error", "de" => "Fehler"},
+            msgid: "error.generic",
+            domain: "errors"
+          )
         end
       end
   """

@@ -5,7 +5,7 @@ defmodule Mix.Tasks.GettextMapper.Extract do
   Extracts both msgids and translations from static gettext_mapper maps and populates .po files.
 
   This task scans your codebase for `gettext_mapper(%{...})` calls with static maps and:
-  1. Extracts the default locale messages as msgids
+  1. Extracts the msgid (custom msgid if specified, otherwise default locale message)
   2. Extracts all translations and populates corresponding .po files with msgstr entries
 
   ## Examples
@@ -25,9 +25,23 @@ defmodule Mix.Tasks.GettextMapper.Extract do
   ## How it works
 
   1. Finds all `gettext_mapper(%{...})` calls with static translation maps
-  2. Extracts the default locale message as the msgid
+  2. Extracts the msgid (custom msgid option takes priority over default locale message)
   3. For each locale in the map, updates the corresponding .po file with the translation
   4. Creates new msgid/msgstr entries or updates existing ones
+
+  ## Custom Message IDs
+
+  The task supports the `msgid` option for stable translation keys:
+
+      gettext_mapper(%{"en" => "Hello", "de" => "Hallo"}, msgid: "greeting.hello")
+
+  This creates .po entries with the custom msgid:
+
+      # de/LC_MESSAGES/default.po
+      msgid "greeting.hello"
+      msgstr "Hallo"
+
+  This allows you to use stable keys that don't change when the source text changes.
 
   ## Example
 
@@ -139,32 +153,42 @@ defmodule Mix.Tasks.GettextMapper.Extract do
     # First extract module-level domain if present
     module_domain = extract_module_domain(content)
 
-    # Regex to find gettext_mapper calls with static maps, optionally with domain
-    regex = ~r/gettext_mapper\(\s*%\{([^}]+)\}\s*(?:,\s*domain:\s*"([^"]+)")?\s*\)/s
+    # Regex to find gettext_mapper calls with static maps, optionally with domain and/or msgid
+    # Captures: 1=map_content, 2=first_opt_key, 3=first_opt_value, 4=second_opt_key, 5=second_opt_value
+    regex =
+      ~r/gettext_mapper\(\s*%\{([^}]+)\}\s*(?:,\s*(domain|msgid):\s*"([^"]+)")?(?:,\s*(domain|msgid):\s*"([^"]+)")?\s*\)/s
 
     Regex.scan(regex, content, capture: :all)
     |> Enum.with_index()
     |> Enum.flat_map(fn {captures, index} ->
       full_match = Enum.at(captures, 0, "")
       map_content = Enum.at(captures, 1, "")
-      call_level_domain = Enum.at(captures, 2, "")
+      opt1_key = Enum.at(captures, 2, "")
+      opt1_val = Enum.at(captures, 3, "")
+      opt2_key = Enum.at(captures, 4, "")
+      opt2_val = Enum.at(captures, 5, "")
 
       # Check if this match is in a comment
       if comment_text?(content, full_match) do
         # Skip matches that are in comments
         []
       else
+        # Parse options from captured groups
+        opts = parse_options(opt1_key, opt1_val, opt2_key, opt2_val)
+
         # Determine domain priority: call-level > module-level > default
         domain =
           cond do
-            call_level_domain != "" -> call_level_domain
+            Map.has_key?(opts, "domain") -> Map.get(opts, "domain")
             module_domain != nil -> module_domain
             true -> GettextMapper.GettextAPI.default_domain()
           end
 
+        custom_msgid = Map.get(opts, "msgid")
+
         case parse_translation_map(map_content) do
           {:ok, translations} ->
-            [{translations, domain, "#{file_path}:#{index + 1}"}]
+            [{translations, domain, custom_msgid, "#{file_path}:#{index + 1}"}]
 
           :error ->
             Mix.shell().warn(
@@ -175,6 +199,23 @@ defmodule Mix.Tasks.GettextMapper.Extract do
         end
       end
     end)
+  end
+
+  defp parse_options(key1, val1, key2, val2) do
+    opts = %{}
+
+    opts =
+      if key1 != "" and val1 != "" do
+        Map.put(opts, key1, val1)
+      else
+        opts
+      end
+
+    if key2 != "" and val2 != "" do
+      Map.put(opts, key2, val2)
+    else
+      opts
+    end
   end
 
   defp comment_text?(content, match_text) do
@@ -280,8 +321,11 @@ defmodule Mix.Tasks.GettextMapper.Extract do
 
     # Group by msgid and domain
     grouped_by_msgid_and_domain =
-      Enum.reduce(translation_maps, %{}, fn {translations, domain, source}, acc ->
-        case Map.get(translations, default_locale) do
+      Enum.reduce(translation_maps, %{}, fn {translations, domain, custom_msgid, source}, acc ->
+        # Use custom msgid if provided, otherwise use default locale message
+        msgid = custom_msgid || Map.get(translations, default_locale)
+
+        case msgid do
           nil ->
             acc
 

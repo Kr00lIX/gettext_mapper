@@ -27,10 +27,24 @@ defmodule Mix.Tasks.GettextMapper.Sync do
   ## How it works
 
   1. Finds all `gettext_mapper(%{...})` calls with static translation maps
-  2. Extracts the default locale message from each map
-  3. Looks up current translations for that message in gettext .po files
+  2. Extracts the msgid to look up (custom msgid if specified, otherwise default locale message)
+  3. Looks up current translations for that msgid in gettext .po files
   4. Updates the static map with the current translations
   5. Applies Elixir's built-in formatter to ensure consistent, idiomatic formatting
+
+  ## Custom Message IDs
+
+  The task supports the `msgid` option for stable translation keys:
+
+      # This call uses "greeting.hello" as the msgid for .po file lookup
+      gettext_mapper(%{"en" => "Hello", "de" => "Hallo"}, msgid: "greeting.hello")
+
+  When syncing, the task will:
+  - Look up translations for "greeting.hello" in .po files
+  - Update the map values with found translations
+  - Preserve the `msgid` option in the output
+
+  This allows you to change the displayed text while keeping the same translation key.
 
   ## Formatting
 
@@ -179,23 +193,42 @@ defmodule Mix.Tasks.GettextMapper.Sync do
     # Split content into lines to check for comments
     lines = String.split(content, "\n")
 
-    # Regex to find gettext_mapper calls with static maps, optionally with domain
-    regex = ~r/gettext_mapper\(\s*%\{([^}]+)\}\s*(?:,\s*domain:\s*"([^"]+)")?\s*\)/s
+    # Regex to find gettext_mapper calls with static maps, optionally with domain and/or msgid
+    # Captures: 1=map_content, 2=first_opt_key, 3=first_opt_value, 4=second_opt_key, 5=second_opt_value
+    regex =
+      ~r/gettext_mapper\(\s*%\{([^}]+)\}\s*(?:,\s*(domain|msgid):\s*"([^"]+)")?(?:,\s*(domain|msgid):\s*"([^"]+)")?\s*\)/s
 
-    Regex.replace(regex, content, fn full_match, map_content, domain_content ->
+    Regex.replace(regex, content, fn full_match, map_content, opt1_key, opt1_val, opt2_key, opt2_val ->
       # Check if this match is inside a comment
       if in_comment?(full_match, content, lines) do
         # Return the match unchanged if it's in a comment
         full_match
       else
-        domain =
-          if domain_content != "",
-            do: domain_content,
-            else: GettextMapper.GettextAPI.default_domain()
+        # Parse options from captured groups
+        opts = parse_options(opt1_key, opt1_val, opt2_key, opt2_val)
+        domain = Map.get(opts, "domain", GettextMapper.GettextAPI.default_domain())
+        custom_msgid = Map.get(opts, "msgid")
 
-        process_translation_map(map_content, domain, backend, full_match)
+        process_translation_map(map_content, domain, custom_msgid, backend, full_match)
       end
     end)
+  end
+
+  defp parse_options(key1, val1, key2, val2) do
+    opts = %{}
+
+    opts =
+      if key1 != "" and val1 != "" do
+        Map.put(opts, key1, val1)
+      else
+        opts
+      end
+
+    if key2 != "" and val2 != "" do
+      Map.put(opts, key2, val2)
+    else
+      opts
+    end
   end
 
   defp in_comment?(match_text, full_content, _lines) do
@@ -265,27 +298,22 @@ defmodule Mix.Tasks.GettextMapper.Sync do
     open_blocks > 0
   end
 
-  defp process_translation_map(map_content, domain, backend, full_match) do
+  defp process_translation_map(map_content, domain, custom_msgid, backend, full_match) do
     case parse_translation_map(map_content) do
       {:ok, translations} ->
-        # Try to find the default locale message to look up in gettext
+        # Use custom msgid if provided, otherwise try default locale message
         default_locale = get_default_locale(backend)
         default_message = Map.get(translations, default_locale)
 
-        if default_message do
-          updated_translations = generate_translation_map(default_message, backend, domain)
-          format_translation_map_call_with_elixir_formatter(updated_translations, domain)
-        else
-          # If no default locale found, try the first English message
-          english_message = Map.get(translations, "en")
+        # Determine which msgid to use for lookup
+        lookup_msgid = custom_msgid || default_message || Map.get(translations, "en")
 
-          if english_message do
-            updated_translations = generate_translation_map(english_message, backend, domain)
-            format_translation_map_call_with_elixir_formatter(updated_translations, domain)
-          else
-            # Return original if we can't find a suitable message
-            full_match
-          end
+        if lookup_msgid do
+          updated_translations = generate_translation_map(lookup_msgid, backend, domain)
+          format_translation_map_call_with_elixir_formatter(updated_translations, domain, custom_msgid)
+        else
+          # Return original if we can't find a suitable message
+          full_match
         end
 
       :error ->
@@ -400,7 +428,7 @@ defmodule Mix.Tasks.GettextMapper.Sync do
   end
 
   # Format using Elixir's built-in formatter for consistent, idiomatic formatting
-  defp format_translation_map_call_with_elixir_formatter(translations, domain) do
+  defp format_translation_map_call_with_elixir_formatter(translations, domain, custom_msgid) do
     default_domain = GettextMapper.GettextAPI.default_domain()
 
     # Create unformatted string with translations
@@ -409,12 +437,18 @@ defmodule Mix.Tasks.GettextMapper.Sync do
         ~s("#{locale}" => "#{escape_string(translation)}")
       end)
 
+    # Build options list
+    opts = []
+    opts = if domain != default_domain, do: ["domain: \"#{domain}\"" | opts], else: opts
+    opts = if custom_msgid, do: ["msgid: \"#{custom_msgid}\"" | opts], else: opts
+    opts = Enum.reverse(opts)
+
     # Build the basic call
     unformatted =
-      if domain == default_domain do
+      if Enum.empty?(opts) do
         "gettext_mapper(%{#{Enum.join(entries, ", ")}})"
       else
-        "gettext_mapper(%{#{Enum.join(entries, ", ")}}, domain: \"#{domain}\")"
+        "gettext_mapper(%{#{Enum.join(entries, ", ")}}, #{Enum.join(opts, ", ")})"
       end
 
     # Use Elixir's formatter for consistent formatting

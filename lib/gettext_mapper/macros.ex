@@ -123,9 +123,10 @@ defmodule GettextMapper.Macros do
   defp sync_map_with_gettext(map_ast, opts, caller, domain) do
     gettext_backend = backend(caller)
     _domain = Keyword.get(opts, :domain, GettextAPI.default_domain())
+    custom_msgid = Keyword.get(opts, :msgid)
 
     # For extraction: if this is a literal map, extract the default locale message
-    extracted_calls = extract_messages_for_gettext(map_ast, gettext_backend, domain)
+    extracted_calls = extract_messages_for_gettext(map_ast, gettext_backend, domain, custom_msgid)
 
     quote do
       map = unquote(map_ast)
@@ -146,9 +147,12 @@ defmodule GettextMapper.Macros do
   end
 
   # Extract messages from literal maps for gettext extraction
-  defp extract_messages_for_gettext({:%{}, _, pairs}, backend, domain) do
+  defp extract_messages_for_gettext({:%{}, _, pairs}, backend, domain, custom_msgid) do
     # Find default language message from literal map pairs
     default_message = find_default_language_message(pairs)
+
+    # Use custom msgid if provided, otherwise use default locale message
+    msgid_to_use = custom_msgid || default_message
 
     # Also extract all locale translations for seeding gettext files
     all_translations = extract_all_translations(pairs)
@@ -157,7 +161,7 @@ defmodule GettextMapper.Macros do
 
     # Add main gettext/dgettext call for extraction tools based on domain
     extraction_calls =
-      if default_message do
+      if msgid_to_use do
         [
           quote do
             # This call is for gettext extraction tools
@@ -166,9 +170,9 @@ defmodule GettextMapper.Macros do
 
             _ =
               if domain_value == default_domain do
-                Gettext.gettext(unquote(backend), unquote(default_message))
+                Gettext.gettext(unquote(backend), unquote(msgid_to_use))
               else
-                Gettext.dgettext(unquote(backend), domain_value, unquote(default_message))
+                Gettext.dgettext(unquote(backend), domain_value, unquote(msgid_to_use))
               end
           end
           | extraction_calls
@@ -190,12 +194,12 @@ defmodule GettextMapper.Macros do
                   default_domain = GettextMapper.GettextAPI.default_domain()
 
                   if domain_value == default_domain do
-                    Gettext.gettext(unquote(backend), unquote(default_message || message))
+                    Gettext.gettext(unquote(backend), unquote(msgid_to_use || message))
                   else
                     Gettext.dgettext(
                       unquote(backend),
                       domain_value,
-                      unquote(default_message || message)
+                      unquote(msgid_to_use || message)
                     )
                   end
                 end)
@@ -210,7 +214,7 @@ defmodule GettextMapper.Macros do
     extraction_calls
   end
 
-  defp extract_messages_for_gettext(_, _, _), do: []
+  defp extract_messages_for_gettext(_, _, _, _), do: []
 
   # Find default language message from map literal pairs
   defp find_default_language_message(pairs) do

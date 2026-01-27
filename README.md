@@ -135,7 +135,50 @@ defmodule MyApp.AdminPanel do
 end
 ```
 
-### 4. Custom Backend Support
+### 4. Custom Message IDs
+
+Use stable translation keys instead of text as the gettext msgid:
+
+```elixir
+defmodule MyApp.UI do
+  use GettextMapper
+
+  def greeting do
+    # Uses "ui.greeting" as msgid in .po files instead of "Hello"
+    gettext_mapper(%{
+      "en" => "Hello",
+      "de" => "Hallo"
+    }, msgid: "ui.greeting")
+  end
+
+  def error_message do
+    # Combine msgid with domain
+    gettext_mapper(%{
+      "en" => "Something went wrong",
+      "de" => "Etwas ist schief gelaufen"
+    }, msgid: "error.generic", domain: "errors")
+  end
+end
+```
+
+This creates .po entries with stable keys:
+
+```po
+# priv/gettext/de/LC_MESSAGES/default.po
+msgid "ui.greeting"
+msgstr "Hallo"
+
+# priv/gettext/de/LC_MESSAGES/errors.po
+msgid "error.generic"
+msgstr "Etwas ist schief gelaufen"
+```
+
+**Benefits of custom msgid:**
+- Translation keys remain stable even when source text changes
+- Easier to reference translations in external tools
+- Better organization with dot-notation keys (e.g., `module.component.message`)
+
+### 5. Custom Backend Support
 
 Use a specific Gettext backend for a module:
 
@@ -165,7 +208,7 @@ defmodule MyApp.LegacyModule do
 end
 ```
 
-### 5. Runtime Localization
+### 6. Runtime Localization
 
 ```elixir
 # Set the current locale
