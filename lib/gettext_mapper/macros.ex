@@ -1,9 +1,46 @@
 defmodule GettextMapper.Macros do
   @moduledoc """
   Macros for generating translation maps from Gettext calls and validating translation maps.
+
+  ## Macros
+
+  - `gettext_mapper/2` - Returns a translation map
+  - `lgettext_mapper/2` - Returns the localized string for the current locale
+
+  ## Examples
+
+      use GettextMapper
+
+      # Returns the full map
+      gettext_mapper(%{"en" => "Hello", "de" => "Hallo"})
+      #=> %{"en" => "Hello", "de" => "Hallo"}
+
+      # Returns the localized string for current locale
+      lgettext_mapper(%{"en" => "Hello", "de" => "Hallo"})
+      #=> "Hello" (when locale is "en")
+
+      # With custom msgid
+      lgettext_mapper(%{"en" => "Hello", "de" => "Hallo"}, msgid: "greeting.hello")
+      #=> "Hello" (when locale is "en")
   """
   alias GettextMapper.GettextAPI
 
+  @doc """
+  Returns a translation map, validating structure and enabling gettext extraction.
+
+  ## Options
+
+  - `:domain` - The gettext domain (default: configured default domain)
+  - `:msgid` - Custom message ID for stable translation keys
+
+  ## Examples
+
+      gettext_mapper(%{"en" => "Hello", "de" => "Hallo"})
+      #=> %{"en" => "Hello", "de" => "Hallo"}
+
+      gettext_mapper(%{"en" => "Hello"}, msgid: "greeting.hello", domain: "ui")
+      #=> %{"en" => "Hello", ...}
+  """
   defmacro gettext_mapper(translation_source, opts \\ []) do
     # Get domain from opts or module attribute
     domain =
@@ -45,6 +82,91 @@ defmodule GettextMapper.Macros do
                     "gettext_mapper expects either a gettext function call or a translation map"
           end
         end
+    end
+  end
+
+  @doc """
+  Returns the localized string for the current locale from a translation map.
+
+  This is a convenience macro that combines `gettext_mapper/2` with `GettextMapper.localize/1`.
+  It validates the translation map, enables gettext extraction, and returns the translation
+  for the current locale.
+
+  ## Options
+
+  - `:domain` - The gettext domain (default: configured default domain)
+  - `:msgid` - Custom message ID for stable translation keys
+  - `:default` - Fallback value if no translation is found (default: "")
+
+  ## Examples
+
+      # Returns localized string for current locale
+      lgettext_mapper(%{"en" => "Hello", "de" => "Hallo"})
+      #=> "Hello" (when locale is "en")
+      #=> "Hallo" (when locale is "de")
+
+      # With custom msgid
+      lgettext_mapper(%{"en" => "Hello", "de" => "Hallo"}, msgid: "greeting.hello")
+      #=> "Hello" (when locale is "en")
+
+      # With default fallback
+      lgettext_mapper(%{"en" => "Hello"}, default: "No translation")
+      #=> "No translation" (when locale is "fr" and "fr" not in map)
+
+      # With domain
+      lgettext_mapper(%{"en" => "Error"}, domain: "errors", msgid: "error.generic")
+      #=> "Error" (when locale is "en")
+  """
+  defmacro lgettext_mapper(translation_source, opts \\ []) do
+    default = Keyword.get(opts, :default, "")
+    # Remove :default from opts as it's not used by gettext_mapper
+    mapper_opts = Keyword.delete(opts, :default)
+
+    # Get domain from opts or module attribute
+    domain =
+      quote do
+        case unquote(Keyword.get(mapper_opts, :domain)) do
+          nil -> @gettext_mapper_domain
+          domain -> domain
+        end
+      end
+
+    map_result =
+      case translation_source do
+        # Handle gettext function calls
+        {gettext_fn, _, _}
+        when gettext_fn in [
+               :gettext,
+               :dgettext,
+               :ngettext,
+               :dngettext,
+               :pgettext,
+               :dpgettext,
+               :pngettext,
+               :dpngettext
+             ] ->
+          generate_map_from_gettext(translation_source, mapper_opts, __CALLER__, domain)
+
+        # Handle static translation maps
+        {:%{}, _, _} = map_ast ->
+          sync_map_with_gettext(map_ast, mapper_opts, __CALLER__, domain)
+
+        # Handle map variables or other expressions that should be maps
+        _ ->
+          quote do
+            case unquote(translation_source) do
+              map when is_map(map) ->
+                unquote(sync_map_with_gettext(translation_source, mapper_opts, __CALLER__, domain))
+
+              _ ->
+                raise ArgumentError,
+                      "lgettext_mapper expects either a gettext function call or a translation map"
+            end
+          end
+      end
+
+    quote do
+      GettextMapper.localize(unquote(map_result), unquote(default))
     end
   end
 

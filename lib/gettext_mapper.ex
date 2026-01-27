@@ -22,8 +22,13 @@ defmodule GettextMapper do
         use GettextMapper
 
         def name do
-          # Static translation map - extractable by Gettext
-          gettext_mapper(%{"en" => "Product Name"})
+          # Returns the full translation map
+          gettext_mapper(%{"en" => "Product Name", "de" => "Produktname"})
+        end
+
+        def title do
+          # Returns the localized string for current locale
+          lgettext_mapper(%{"en" => "Products", "de" => "Produkte"})
         end
 
         def description(translation_map) do
@@ -74,6 +79,33 @@ defmodule GettextMapper do
       # de/LC_MESSAGES/default.po
       msgid "greeting.hello"
       msgstr "Hallo"
+
+  ## Localized Strings (lgettext_mapper)
+
+  Use `lgettext_mapper/2` when you want the translated string directly instead of the map:
+
+      defmodule MyApp.UI do
+        use GettextMapper
+
+        def welcome_message do
+          # Returns "Hello" when locale is "en", "Hallo" when locale is "de"
+          lgettext_mapper(%{"en" => "Hello", "de" => "Hallo"})
+        end
+
+        def error_message do
+          # With custom msgid and default fallback
+          lgettext_mapper(%{"en" => "Error", "de" => "Fehler"},
+            msgid: "error.generic",
+            default: "An error occurred"
+          )
+        end
+      end
+
+  The `lgettext_mapper` macro:
+  - Returns the translation for the current locale
+  - Falls back to the default locale if current locale not found
+  - Falls back to the `:default` option if no translation found
+  - Supports all options from `gettext_mapper` (`:domain`, `:msgid`)
 
   ## Database Integration
 

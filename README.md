@@ -208,7 +208,48 @@ defmodule MyApp.LegacyModule do
 end
 ```
 
-### 6. Runtime Localization
+### 6. Localized Strings (lgettext_mapper)
+
+Use `lgettext_mapper` when you want the translated string directly instead of the map:
+
+```elixir
+defmodule MyApp.UI do
+  use GettextMapper
+
+  def welcome_message do
+    # Returns "Hello" when locale is "en", "Hallo" when locale is "de"
+    lgettext_mapper(%{"en" => "Hello", "de" => "Hallo"})
+  end
+
+  def page_title do
+    # With custom msgid
+    lgettext_mapper(%{"en" => "Home", "de" => "Startseite"}, msgid: "nav.home")
+  end
+
+  def error_message do
+    # With default fallback and domain
+    lgettext_mapper(%{"en" => "Error", "de" => "Fehler"},
+      msgid: "error.generic",
+      domain: "errors",
+      default: "An error occurred"
+    )
+  end
+end
+```
+
+**Comparison:**
+```elixir
+# gettext_mapper returns the full map
+gettext_mapper(%{"en" => "Hello", "de" => "Hallo"})
+#=> %{"en" => "Hello", "de" => "Hallo"}
+
+# lgettext_mapper returns the localized string
+lgettext_mapper(%{"en" => "Hello", "de" => "Hallo"})
+#=> "Hello" (when locale is "en")
+#=> "Hallo" (when locale is "de")
+```
+
+### 7. Runtime Localization
 
 ```elixir
 # Set the current locale
