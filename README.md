@@ -63,207 +63,130 @@ end
 
 ## Usage
 
-### 1. Static Translation Maps
+### Basic Example: Subscription Plans with Translations
 
-Use `gettext_mapper/1` for static translations that should be extracted by Gettext tools:
+Let's say you have subscription plans that need translated names and descriptions stored in the database.
+
+**1. Define your schema with translated fields:**
 
 ```elixir
-defmodule MyApp.ProductController do
+defmodule MyApp.SubscriptionPlan do
+  use Ecto.Schema
+
+  schema "subscription_plans" do
+    field :key, :string
+    field :price, :decimal
+    field :name, GettextMapper.Ecto.Type.Translated
+    field :description, GettextMapper.Ecto.Type.Translated
+    timestamps()
+  end
+end
+```
+
+**2. Populate the database with translations using `gettext_mapper`:**
+
+```elixir
+defmodule MyApp.Seeds.Plans do
+  use GettextMapper
+
+  def seed do
+    Repo.insert!(%SubscriptionPlan{
+      key: "basic",
+      price: Decimal.new("9.99"),
+      name: gettext_mapper(%{
+        "en" => "Basic Plan",
+        "de" => "Basis-Tarif",
+        "es" => "Plan Básico"
+      }, msgid: "plan.basic.name"),
+      description: gettext_mapper(%{
+        "en" => "Perfect for individuals getting started",
+        "de" => "Perfekt für Einsteiger",
+        "es" => "Perfecto para comenzar"
+      }, msgid: "plan.basic.description")
+    })
+  end
+end
+```
+
+**3. Display localized content based on user's locale:**
+
+```elixir
+# In your controller or view
+plan = Repo.get_by!(SubscriptionPlan, key: "basic")
+
+# Returns translation for current locale (e.g., "de")
+GettextMapper.localize(plan.name)
+#=> "Basis-Tarif"
+
+GettextMapper.localize(plan.description, "No description available")
+#=> "Perfekt für Einsteiger"
+```
+
+**4. Or use `lgettext_mapper` for inline localized strings:**
+
+```elixir
+defmodule MyAppWeb.PlanController do
   use GettextMapper
 
   def index(conn, _params) do
+    # Returns the localized string directly for current locale
     page_title = lgettext_mapper(%{
-      "en" => "Product Catalog",
-      "de" => "Produktkatalog", 
-      "es" => "Catálogo de Productos"
-    })
-    
-    render(conn, "index.html", title: page_title)
+      "en" => "Choose Your Plan",
+      "de" => "Wählen Sie Ihren Tarif"
+    }, msgid: "plans.page_title")
+
+    render(conn, :index, title: page_title)
   end
 end
 ```
 
-### 2. Database-Stored Translations
+### Key Concepts
 
-Use Ecto types for storing translations in the database:
+| Macro | Returns | Use Case |
+|-------|---------|----------|
+| `gettext_mapper/2` | Map of all translations | Storing in database |
+| `lgettext_mapper/2` | Localized string | Displaying to user |
+| `GettextMapper.localize/2` | Localized string | Reading from database |
 
-```elixir
-defmodule MyApp.Product do
-  use Ecto.Schema
-  import Ecto.Changeset
+### Additional Features
 
-  schema "products" do
-    field :name_translations, GettextMapper.Ecto.Type.Translated
-    field :description_translations, GettextMapper.Ecto.Type.Translated
-    timestamps()
-  end
-
-  def changeset(product, attrs) do
-    product
-    |> cast(attrs, [:name_translations, :description_translations])
-    |> validate_required([:name_translations])
-  end
-
-  # Helper functions for getting localized content
-  def name(product), do: GettextMapper.localize(product.name_translations)
-  def description(product), do: GettextMapper.localize(product.description_translations, "No description")
-end
-```
-
-### 3. Domain Support
-
-Organize your translations by domain:
-
-```elixir
-defmodule MyApp.AdminPanel do
-  use GettextMapper, domain: "admin"
-
-  def dashboard_title do
-    lgettext_mapper(%{
-      "en" => "Admin Dashboard",
-      "de" => "Verwaltungsdashboard"
-    })
-  end
-
-  def error_with_custom_domain do
-    # Override module domain for specific calls
-    gettext_mapper(%{
-      "en" => "Critical Error",
-      "de" => "Kritischer Fehler"
-    }, domain: "errors")
-  end
-end
-```
-
-### 4. Custom Message IDs
+#### Custom Message IDs
 
 Use stable translation keys instead of text as the gettext msgid:
 
 ```elixir
-defmodule MyApp.UI do
-  use GettextMapper
-
-  def greeting do
-    # Uses "ui.greeting" as msgid in .po files instead of "Hello"
-    gettext_mapper(%{
-      "en" => "Hello",
-      "de" => "Hallo"
-    }, msgid: "ui.greeting")
-  end
-
-  def error_message do
-    # Combine msgid with domain
-    gettext_mapper(%{
-      "en" => "Something went wrong",
-      "de" => "Etwas ist schief gelaufen"
-    }, msgid: "error.generic", domain: "errors")
-  end
-end
+gettext_mapper(%{"en" => "Hello", "de" => "Hallo"}, msgid: "greeting.hello")
 ```
 
-This creates .po entries with stable keys:
+This creates .po entries with stable keys that don't change when text changes:
 
 ```po
-# priv/gettext/de/LC_MESSAGES/default.po
-msgid "ui.greeting"
+msgid "greeting.hello"
 msgstr "Hallo"
-
-# priv/gettext/de/LC_MESSAGES/errors.po
-msgid "error.generic"
-msgstr "Etwas ist schief gelaufen"
 ```
 
-**Benefits of custom msgid:**
-- Translation keys remain stable even when source text changes
-- Easier to reference translations in external tools
-- Better organization with dot-notation keys (e.g., `module.component.message`)
+#### Domain Support
 
-### 5. Custom Backend Support
-
-Use a specific Gettext backend for a module:
+Organize translations by domain:
 
 ```elixir
-# Use a specific Gettext backend for a module
-defmodule MyApp.SpecialModule do
-  use GettextMapper, backend: MyApp.SpecialGettext
+defmodule MyApp.Admin do
+  use GettextMapper, domain: "admin"
 
-  def special_message do
-    gettext_mapper(%{
-      "en" => "Special Message",
-      "de" => "Spezielle Nachricht"
-    })
-  end
-end
-
-# Combine custom backend with custom domain
-defmodule MyApp.LegacyModule do
-  use GettextMapper, backend: MyApp.LegacyGettext, domain: "legacy"
-
-  def legacy_content do
-    gettext_mapper(%{
-      "en" => "Legacy Content",
-      "de" => "Legacy Inhalt"
-    })
+  def title do
+    lgettext_mapper(%{"en" => "Dashboard", "de" => "Übersicht"})
   end
 end
 ```
 
-### 6. Localized Strings (lgettext_mapper)
+#### Custom Backend
 
-Use `lgettext_mapper` when you want the translated string directly instead of the map:
+Use a specific Gettext backend:
 
 ```elixir
-defmodule MyApp.UI do
-  use GettextMapper
-
-  def welcome_message do
-    # Returns "Hello" when locale is "en", "Hallo" when locale is "de"
-    lgettext_mapper(%{"en" => "Hello", "de" => "Hallo"})
-  end
-
-  def page_title do
-    # With custom msgid
-    lgettext_mapper(%{"en" => "Home", "de" => "Startseite"}, msgid: "nav.home")
-  end
-
-  def error_message do
-    # With default fallback and domain
-    lgettext_mapper(%{"en" => "Error", "de" => "Fehler"},
-      msgid: "error.generic",
-      domain: "errors",
-      default: "An error occurred"
-    )
-  end
+defmodule MyApp.Legacy do
+  use GettextMapper, backend: MyApp.LegacyGettext
 end
-```
-
-**Comparison:**
-```elixir
-# gettext_mapper returns the full map
-gettext_mapper(%{"en" => "Hello", "de" => "Hallo"})
-#=> %{"en" => "Hello", "de" => "Hallo"}
-
-# lgettext_mapper returns the localized string
-lgettext_mapper(%{"en" => "Hello", "de" => "Hallo"})
-#=> "Hello" (when locale is "en")
-#=> "Hallo" (when locale is "de")
-```
-
-### 7. Runtime Localization
-
-```elixir
-# Set the current locale
-Gettext.put_locale(MyApp.Gettext, "de")
-
-# Localize stored translations
-translation_map = %{"en" => "Hello", "de" => "Hallo", "es" => "Hola"}
-GettextMapper.localize(translation_map)  #=> "Hallo"
-
-# Get specific locale with fallback
-GettextMapper.translate(translation_map, "fr")  #=> "Hello" (falls back to default)
-
-# With custom fallback
-GettextMapper.localize(translation_map, "Not available")  #=> "Hallo"
 ```
 
 ## Mix Tasks
