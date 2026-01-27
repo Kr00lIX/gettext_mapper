@@ -41,7 +41,7 @@ defmodule GettextMapper.MixProject do
   defp deps do
     [
       {:ecto, "~> 3.0"},
-      {:gettext, "~> 0.26"},
+      {:gettext, ">= 0.26.0 and < 2.0.0"},
 
       # Documentation
       {:ex_doc, "~> 0.35", only: :dev, runtime: false},
