@@ -156,7 +156,9 @@ defmodule GettextMapper.Macros do
           quote do
             case unquote(translation_source) do
               map when is_map(map) ->
-                unquote(sync_map_with_gettext(translation_source, mapper_opts, __CALLER__, domain))
+                unquote(
+                  sync_map_with_gettext(translation_source, mapper_opts, __CALLER__, domain)
+                )
 
               _ ->
                 raise ArgumentError,

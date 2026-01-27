@@ -198,7 +198,12 @@ defmodule Mix.Tasks.GettextMapper.Sync do
     regex =
       ~r/gettext_mapper\(\s*%\{([^}]+)\}\s*(?:,\s*(domain|msgid):\s*"([^"]+)")?(?:,\s*(domain|msgid):\s*"([^"]+)")?\s*\)/s
 
-    Regex.replace(regex, content, fn full_match, map_content, opt1_key, opt1_val, opt2_key, opt2_val ->
+    Regex.replace(regex, content, fn full_match,
+                                     map_content,
+                                     opt1_key,
+                                     opt1_val,
+                                     opt2_key,
+                                     opt2_val ->
       # Check if this match is inside a comment
       if in_comment?(full_match, content, lines) do
         # Return the match unchanged if it's in a comment
@@ -310,7 +315,12 @@ defmodule Mix.Tasks.GettextMapper.Sync do
 
         if lookup_msgid do
           updated_translations = generate_translation_map(lookup_msgid, backend, domain)
-          format_translation_map_call_with_elixir_formatter(updated_translations, domain, custom_msgid)
+
+          format_translation_map_call_with_elixir_formatter(
+            updated_translations,
+            domain,
+            custom_msgid
+          )
         else
           # Return original if we can't find a suitable message
           full_match
