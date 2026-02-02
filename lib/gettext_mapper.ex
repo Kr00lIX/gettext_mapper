@@ -99,13 +99,18 @@ defmodule GettextMapper do
             default: "An error occurred"
           )
         end
+
+        def german_greeting do
+          # With specific locale (returns "Hallo" regardless of current locale)
+          lgettext_mapper(%{"en" => "Hello", "de" => "Hallo"}, locale: "de")
+        end
       end
 
   The `lgettext_mapper` macro:
-  - Returns the translation for the current locale
+  - Returns the translation for the current locale (or specified `:locale`)
   - Falls back to the default locale if current locale not found
   - Falls back to the `:default` option if no translation found
-  - Supports all options from `gettext_mapper` (`:domain`, `:msgid`)
+  - Supports all options from `gettext_mapper` (`:domain`, `:msgid`) plus `:locale`
 
   ## Database Integration
 
