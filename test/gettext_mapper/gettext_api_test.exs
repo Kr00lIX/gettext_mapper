@@ -1,14 +1,13 @@
 defmodule GettextMapper.GettextAPITest do
-  use ExUnit.Case, async: true
+  # Use async: false because some tests modify global Application config
+  use ExUnit.Case, async: false
 
   alias GettextMapper.GettextAPI
 
   describe "GettextMapper.GettextAPI" do
     test "locale/0 returns current locale" do
-      # The locale should be set by the test helper
       locale = GettextAPI.locale()
       assert is_binary(locale)
-      # Default from test setup
       assert locale == "en"
     end
 
@@ -39,16 +38,15 @@ defmodule GettextMapper.GettextAPITest do
     end
 
     test "gettext_module/0 raises when not configured" do
-      # Temporarily remove the configuration
       old_config = Application.get_env(:gettext_mapper, :gettext)
-      Application.delete_env(:gettext_mapper, :gettext)
 
-      assert_raise RuntimeError, ~r/expects :gettext to be configured/, fn ->
-        GettextAPI.gettext_module()
-      end
+      try do
+        Application.delete_env(:gettext_mapper, :gettext)
 
-      # Restore configuration
-      if old_config do
+        assert_raise RuntimeError, ~r/expects :gettext to be configured/, fn ->
+          GettextAPI.gettext_module()
+        end
+      after
         Application.put_env(:gettext_mapper, :gettext, old_config)
       end
     end
@@ -56,21 +54,18 @@ defmodule GettextMapper.GettextAPITest do
     test "locale changes affect locale/0 return value" do
       original_locale = GettextAPI.locale()
 
-      # Change locale
-      Gettext.put_locale(MyGettextApp, "de")
-      assert GettextAPI.locale() == "de"
+      try do
+        Gettext.put_locale(MyGettextApp, "de")
+        assert GettextAPI.locale() == "de"
 
-      # Change back
-      Gettext.put_locale(MyGettextApp, "uk")
-      assert GettextAPI.locale() == "uk"
-
-      # Restore original
-      Gettext.put_locale(MyGettextApp, original_locale)
-      assert GettextAPI.locale() == original_locale
+        Gettext.put_locale(MyGettextApp, "uk")
+        assert GettextAPI.locale() == "uk"
+      after
+        Gettext.put_locale(MyGettextApp, original_locale)
+      end
     end
 
     test "functions work with different backend configurations" do
-      # Test with the configured backend
       assert is_binary(GettextAPI.locale())
       assert is_list(GettextAPI.known_locales())
       assert is_binary(GettextAPI.default_locale())
@@ -79,7 +74,6 @@ defmodule GettextMapper.GettextAPITest do
     end
 
     test "all functions return expected types" do
-      # Type checking for API consistency
       assert is_binary(GettextAPI.locale())
       assert is_list(GettextAPI.known_locales())
       assert Enum.all?(GettextAPI.known_locales(), &is_binary/1)
@@ -96,50 +90,85 @@ defmodule GettextMapper.GettextAPITest do
     end
 
     test "current locale may or may not be in known_locales" do
-      # This is expected behavior - current locale can be set to any value
-      # but known_locales are those with .po files
       current_locale = GettextAPI.locale()
       known_locales = GettextAPI.known_locales()
 
-      # The current locale might not be in known_locales if it's set dynamically
-      # This test just ensures the API works correctly
       assert is_binary(current_locale)
       assert is_list(known_locales)
     end
 
     test "supported_locales configuration takes priority over gettext backend" do
-      # Store original configuration
-      original_supported_locales = Application.get_env(:gettext_mapper, :supported_locales)
+      original = Application.get_env(:gettext_mapper, :supported_locales)
 
-      # Set custom supported locales
-      Application.put_env(:gettext_mapper, :supported_locales, ["en", "custom", "test"])
-
-      # Should return configured locales instead of backend locales
-      assert GettextAPI.known_locales() == ["en", "custom", "test"]
-
-      # Restore original configuration
-      if original_supported_locales do
-        Application.put_env(:gettext_mapper, :supported_locales, original_supported_locales)
-      else
-        Application.delete_env(:gettext_mapper, :supported_locales)
+      try do
+        Application.put_env(:gettext_mapper, :supported_locales, ["en", "custom", "test"])
+        assert GettextAPI.known_locales() == ["en", "custom", "test"]
+      after
+        Application.put_env(:gettext_mapper, :supported_locales, original)
       end
     end
 
     test "falls back to gettext backend when no supported_locales configured" do
-      # Store original configuration
-      original_supported_locales = Application.get_env(:gettext_mapper, :supported_locales)
+      original = Application.get_env(:gettext_mapper, :supported_locales)
 
-      # Remove supported_locales configuration
-      Application.delete_env(:gettext_mapper, :supported_locales)
+      try do
+        Application.delete_env(:gettext_mapper, :supported_locales)
 
-      # Should fall back to backend locales
-      backend_locales = Gettext.known_locales(MyGettextApp)
-      assert GettextAPI.known_locales() == backend_locales
-
-      # Restore original configuration
-      if original_supported_locales do
-        Application.put_env(:gettext_mapper, :supported_locales, original_supported_locales)
+        backend_locales = Gettext.known_locales(MyGettextApp)
+        assert GettextAPI.known_locales() == backend_locales
+      after
+        Application.put_env(:gettext_mapper, :supported_locales, original)
       end
+    end
+  end
+
+  describe "get_backend/1" do
+    test "returns configured backend when no options provided" do
+      backend = GettextAPI.get_backend([])
+
+      assert backend == MyGettextApp
+    end
+
+    test "returns backend from string option" do
+      # Module names need "Elixir." prefix when converted from string
+      backend = GettextAPI.get_backend(backend: "Elixir.MyGettextApp")
+
+      assert backend == MyGettextApp
+    end
+
+    test "returns backend from atom option" do
+      backend = GettextAPI.get_backend(backend: MyGettextApp)
+
+      assert backend == MyGettextApp
+    end
+  end
+
+  describe "priv_dir/1" do
+    test "returns priv directory for backend" do
+      priv_dir = GettextAPI.priv_dir(MyGettextApp)
+
+      assert is_binary(priv_dir)
+      assert String.contains?(priv_dir, "priv") or String.contains?(priv_dir, "gettext")
+    end
+
+    test "returns fallback for invalid backend" do
+      priv_dir = GettextAPI.priv_dir(NonExistentModule)
+
+      assert priv_dir == "priv/gettext"
+    end
+  end
+
+  describe "default_locale_for/1" do
+    test "returns default locale for backend" do
+      locale = GettextAPI.default_locale_for(MyGettextApp)
+
+      assert locale == "en"
+    end
+
+    test "returns fallback for invalid backend" do
+      locale = GettextAPI.default_locale_for(NonExistentModule)
+
+      assert locale == "en"
     end
   end
 end

@@ -359,12 +359,13 @@ defmodule GettextMapper.CodeParser do
 
   defp extract_gettext_mapper_call_from_text(text) do
     # Find the gettext_mapper or lgettext_mapper call in the text
+    # Check lgettext_mapper first since "lgettext_mapper" contains "gettext_mapper"
     cond do
-      String.contains?(text, "gettext_mapper(") ->
-        extract_call(text, "gettext_mapper(")
-
       String.contains?(text, "lgettext_mapper(") ->
         extract_call(text, "lgettext_mapper(")
+
+      String.contains?(text, "gettext_mapper(") ->
+        extract_call(text, "gettext_mapper(")
 
       true ->
         nil
