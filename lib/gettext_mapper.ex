@@ -294,10 +294,38 @@ defmodule GettextMapper do
   @doc """
   Fetches the translation for the specified locale from a translations map.
 
-  Falls back to the default locale, then to the configured default translation
-  message if none is found.
-  The default message can be set via the `:default_translation` config
-  (defaults to "NO TRANSLATION").
+  Unlike `localize/3`, this function always requires an explicit locale parameter
+  and uses a configurable default translation message when no translation is found.
+
+  ## Parameters
+
+  - `values` - The translations map
+  - `locale` - The locale to fetch the translation for
+
+  ## Fallback Chain
+
+  1. Returns the translation for the specified locale if found
+  2. Falls back to the default locale translation if specified locale not found
+  3. Falls back to the configured `:default_translation` (defaults to "NO TRANSLATION")
+
+  ## Examples
+
+      iex> GettextMapper.translate(%{"en" => "Hello", "de" => "Hallo"}, "de")
+      "Hallo"
+
+      iex> GettextMapper.translate(%{"en" => "Hello", "de" => "Hallo"}, "en")
+      "Hello"
+
+      # Falls back to default locale ("en") when requested locale not found
+      iex> GettextMapper.translate(%{"en" => "Hello", "de" => "Hallo"}, "fr")
+      "Hello"
+
+  ## Configuration
+
+  You can configure the default translation message:
+
+      config :gettext_mapper, default_translation: "Translation missing"
+
   """
   @spec translate(map(), String.t()) :: String.t()
   def translate(values, locale) when is_map(values) do

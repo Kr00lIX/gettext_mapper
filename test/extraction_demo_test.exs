@@ -23,7 +23,8 @@ defmodule ExtractionDemoTest do
     )
 
     # Verify the module was created and works
-    assert ExtractionDemo.demo() == %{
+    # Use apply/3 to avoid compile-time warning about undefined module
+    assert apply(ExtractionDemo, :demo, []) == %{
              "en" => "Hello World",
              "de" => "Hallo Welt",
              "uk" => "Привіт Світ"
@@ -57,7 +58,8 @@ defmodule ExtractionDemoTest do
       "concept_demo.ex"
     )
 
-    result = ConceptDemo.concept_example()
+    # Use apply/3 to avoid compile-time warning about undefined module
+    result = apply(ConceptDemo, :concept_example, [])
     assert result["en"] == "Concept Test"
     assert result["de"] == "Konzept Test"
     assert result["uk"] == "Концепт Тест"

@@ -394,6 +394,36 @@ defmodule GettextMapper.Macros do
   - All supported locales are present as keys
   - All values are strings
   - No extra locales are present
+
+  ## Parameters
+
+  - `map` - The translation map to validate
+  - `supported_locales` - List of locale strings that must be present
+
+  ## Returns
+
+  - `:ok` on successful validation
+
+  ## Raises
+
+  - `ArgumentError` if the map is missing required locales
+  - `ArgumentError` if the map contains unsupported locales
+  - `ArgumentError` if any values are not strings
+  - `ArgumentError` if the first argument is not a map
+
+  ## Examples
+
+      iex> GettextMapper.Macros.validate_translation_map!(%{"en" => "Hello", "de" => "Hallo"}, ["en", "de"])
+      :ok
+
+      iex> GettextMapper.Macros.validate_translation_map!(%{"en" => "Hello"}, ["en", "de"])
+      ** (ArgumentError) Translation map is missing required locales: ["de"]
+
+      iex> GettextMapper.Macros.validate_translation_map!(%{"en" => "Hello", "fr" => "Bonjour"}, ["en"])
+      ** (ArgumentError) Translation map contains unsupported locales: ["fr"]
+
+      iex> GettextMapper.Macros.validate_translation_map!(%{"en" => 123}, ["en"])
+      ** (ArgumentError) Translation map contains non-string values for locales: ["en"]
   """
   def validate_translation_map!(map, supported_locales)
       when is_map(map) and is_list(supported_locales) do

@@ -27,8 +27,23 @@ defmodule GettextMapper.CodeParser do
   ## Examples
 
       iex> content = ~s|gettext_mapper(%{"en" => "Hello", "de" => "Hallo"})|
-      iex> GettextMapper.CodeParser.find_gettext_mapper_calls(content)
-      [%{line: 1, translations: %{"en" => "Hello", "de" => "Hallo"}, domain: nil, msgid: nil, raw_match: ...}]
+      iex> [call] = GettextMapper.CodeParser.find_gettext_mapper_calls(content)
+      iex> call.translations
+      %{"de" => "Hallo", "en" => "Hello"}
+      iex> call.line
+      1
+
+      # With domain option
+      iex> content = ~s|gettext_mapper(%{"en" => "Hello"}, domain: "admin")|
+      iex> [call] = GettextMapper.CodeParser.find_gettext_mapper_calls(content)
+      iex> call.domain
+      "admin"
+
+      # With custom msgid
+      iex> content = ~s|gettext_mapper(%{"en" => "Hello"}, msgid: "greeting.hello")|
+      iex> [call] = GettextMapper.CodeParser.find_gettext_mapper_calls(content)
+      iex> call.msgid
+      "greeting.hello"
   """
   @spec find_gettext_mapper_calls(String.t()) :: [call_info()]
   def find_gettext_mapper_calls(content) do
@@ -111,10 +126,22 @@ defmodule GettextMapper.CodeParser do
   @doc """
   Escapes a string for safe inclusion in Elixir source code or .po files.
 
+  Handles backslashes and double quotes that need escaping.
+
   ## Examples
 
-      iex> GettextMapper.CodeParser.escape_string(~s|Hello "World"|)
-      ~s|Hello \\"World\\"|
+      iex> GettextMapper.CodeParser.escape_string("Hello World")
+      "Hello World"
+
+  Double quotes are escaped with backslashes:
+
+      escape_string("Hello \"World\"")
+      #=> "Hello \\\"World\\\""
+
+  Backslashes are also escaped:
+
+      escape_string("path\\to\\file")
+      #=> "path\\\\to\\\\file"
   """
   @spec escape_string(String.t()) :: String.t()
   def escape_string(str) do
@@ -126,12 +153,30 @@ defmodule GettextMapper.CodeParser do
   @doc """
   Generates a formatted gettext_mapper call string from translations and options.
 
-  Uses Elixir's Code.format_string!/2 for consistent formatting.
+  Uses Elixir's Code.format_string!/2 for consistent formatting. Translations
+  are sorted alphabetically by locale for consistent output.
+
+  ## Parameters
+
+  - `translations` - Map of locale => translation string
+  - `domain` - Optional domain (nil uses default, non-default domains are included)
+  - `custom_msgid` - Optional custom message ID for stable translation keys
 
   ## Examples
 
       iex> GettextMapper.CodeParser.format_gettext_mapper_call(%{"en" => "Hello"}, nil, nil)
-      ~s|gettext_mapper(%{"en" => "Hello"})|
+      "gettext_mapper(%{\\"en\\" => \\"Hello\\"})"
+
+      iex> GettextMapper.CodeParser.format_gettext_mapper_call(%{"en" => "Hello", "de" => "Hallo"}, nil, nil)
+      "gettext_mapper(%{\\"de\\" => \\"Hallo\\", \\"en\\" => \\"Hello\\"})"
+
+      # With custom domain (non-default)
+      iex> GettextMapper.CodeParser.format_gettext_mapper_call(%{"en" => "Hello"}, "admin", nil)
+      "gettext_mapper(%{\\"en\\" => \\"Hello\\"}, domain: \\"admin\\")"
+
+      # With custom msgid
+      iex> GettextMapper.CodeParser.format_gettext_mapper_call(%{"en" => "Hello"}, nil, "greeting.hello")
+      "gettext_mapper(%{\\"en\\" => \\"Hello\\"}, msgid: \\"greeting.hello\\")"
   """
   @spec format_gettext_mapper_call(map(), String.t() | nil, String.t() | nil) :: String.t()
   def format_gettext_mapper_call(translations, domain, custom_msgid) do
@@ -170,7 +215,23 @@ defmodule GettextMapper.CodeParser do
   @doc """
   Extracts the raw source code for a gettext_mapper call at the given line.
 
-  This is used to get the exact string to replace in the original file.
+  This is used to get the exact string to replace in the original file when
+  syncing translations. It handles multiline calls and properly balances
+  parentheses.
+
+  ## Parameters
+
+  - `content` - The full file content as a string
+  - `line_number` - The 1-based line number where the call starts
+
+  ## Examples
+
+      iex> content = "def foo do\\n  gettext_mapper(%{\\"en\\" => \\"Hello\\"})\\nend"
+      iex> GettextMapper.CodeParser.extract_call_source(content, 2)
+      "gettext_mapper(%{\\"en\\" => \\"Hello\\"})"
+
+      iex> GettextMapper.CodeParser.extract_call_source("no calls here", 1)
+      nil
   """
   @spec extract_call_source(String.t(), pos_integer()) :: String.t() | nil
   def extract_call_source(content, line_number) do
@@ -326,7 +387,8 @@ defmodule GettextMapper.CodeParser do
       line = Enum.at(lines, index)
 
       # Check if this line contains gettext_mapper
-      has_start = String.contains?(line, "gettext_mapper(") or String.contains?(line, "lgettext_mapper(")
+      has_start =
+        String.contains?(line, "gettext_mapper(") or String.contains?(line, "lgettext_mapper(")
 
       if not started and not has_start do
         # Haven't found the start yet, skip

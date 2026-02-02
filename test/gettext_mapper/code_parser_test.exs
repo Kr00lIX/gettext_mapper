@@ -1,6 +1,8 @@
 defmodule GettextMapper.CodeParserTest do
   use ExUnit.Case, async: true
 
+  doctest GettextMapper.CodeParser
+
   alias GettextMapper.CodeParser
 
   describe "find_gettext_mapper_calls/1" do

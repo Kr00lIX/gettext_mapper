@@ -82,7 +82,7 @@ defmodule Mix.Tasks.GettextMapper.Sync do
         if Enum.empty?(paths) do
           find_elixir_files()
         else
-          paths
+          expand_paths(paths)
         end
 
       if dry_run do
@@ -123,7 +123,24 @@ defmodule Mix.Tasks.GettextMapper.Sync do
   defp find_elixir_files do
     "lib/**/*.ex"
     |> Path.wildcard()
-    |> Enum.filter(&File.exists?/1)
+    |> Enum.filter(&File.regular?/1)
+  end
+
+  defp expand_paths(paths) do
+    Enum.flat_map(paths, fn path ->
+      cond do
+        File.regular?(path) ->
+          [path]
+
+        File.dir?(path) ->
+          Path.wildcard(Path.join(path, "**/*.ex"))
+          |> Enum.filter(&File.regular?/1)
+
+        true ->
+          # Path doesn't exist or is something else, skip silently
+          []
+      end
+    end)
   end
 
   defp process_file(file_path, backend, dry_run) do
@@ -184,11 +201,12 @@ defmodule Mix.Tasks.GettextMapper.Sync do
         updated_translations = generate_translation_map(lookup_msgid, backend, effective_domain)
 
         # Format the replacement call
-        replacement = CodeParser.format_gettext_mapper_call(
-          updated_translations,
-          domain,
-          custom_msgid
-        )
+        replacement =
+          CodeParser.format_gettext_mapper_call(
+            updated_translations,
+            domain,
+            custom_msgid
+          )
 
         # Replace in content
         String.replace(content, raw_match, replacement, global: false)
