@@ -235,7 +235,7 @@ defmodule GettextMapper.CodeParser do
 
       iex> content = "def foo do\\n  gettext_mapper(%{\\"en\\" => \\"Hello\\"})\\nend"
       iex> GettextMapper.CodeParser.extract_call_source(content, 2)
-      "gettext_mapper(%{\\"en\\" => \\"Hello\\"})"
+      "  gettext_mapper(%{\\"en\\" => \\"Hello\\"})"
 
       iex> GettextMapper.CodeParser.extract_call_source("no calls here", 1)
       nil
@@ -396,7 +396,7 @@ defmodule GettextMapper.CodeParser do
   defp collect_until_balanced(lines, index, acc, paren_count, started) do
     if index >= length(lines) do
       # Reached end of file without finding complete expression
-      if started, do: String.trim(acc), else: nil
+      if started, do: extract_gettext_mapper_call_from_text(acc), else: nil
     else
       line = Enum.at(lines, index)
 
@@ -416,8 +416,8 @@ defmodule GettextMapper.CodeParser do
         new_started = started or has_start
 
         if new_started and new_count <= 0 do
-          # Found complete expression, extract just the call
-          extract_gettext_mapper_call_from_text(String.trim(new_acc))
+          # Found complete expression, extract just the call (preserving leading whitespace)
+          extract_gettext_mapper_call_from_text(new_acc)
         else
           collect_until_balanced(lines, index + 1, new_acc, new_count, new_started)
         end
@@ -450,18 +450,31 @@ defmodule GettextMapper.CodeParser do
 
   defp extract_call(text, prefix) do
     case String.split(text, prefix, parts: 2) do
-      [_, rest] ->
+      [before, rest] ->
         # Find matching closing paren
         call_body = find_matching_close(rest, 1, "")
 
         if call_body do
-          prefix <> call_body
+          # Preserve leading whitespace from the line containing the call
+          leading_ws = get_leading_whitespace_from_last_line(before)
+          leading_ws <> prefix <> call_body
         else
           nil
         end
 
       _ ->
         nil
+    end
+  end
+
+  defp get_leading_whitespace_from_last_line(text) do
+    # Get the whitespace from the last line (or the only line) before the call
+    lines = String.split(text, "\n")
+    last_line = List.last(lines) || ""
+
+    case Regex.run(~r/^(\s*)$/, last_line) do
+      [_, ws] -> ws
+      _ -> ""
     end
   end
 

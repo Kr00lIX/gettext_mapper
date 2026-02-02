@@ -277,6 +277,34 @@ defmodule GettextMapper.MixTasksTest do
       assert output =~ "Processed"
     end
 
+    test "run/1 preserves original indentation" do
+      test_file = "test_sync_indent.ex"
+
+      # File with deep indentation
+      File.write!(test_file, """
+      defmodule TestSyncIndent do
+        use GettextMapper
+
+        def nested_function do
+          if true do
+            gettext_mapper(%{"en" => "Hello", "de" => "Hallo"})
+          end
+        end
+      end
+      """)
+
+      on_exit(fn -> File.rm(test_file) end)
+
+      capture_io(fn ->
+        Mix.Tasks.GettextMapper.Sync.run(["--backend", "MyGettextApp", test_file])
+      end)
+
+      updated_content = File.read!(test_file)
+
+      # The indentation should be preserved (6 spaces before gettext_mapper)
+      assert updated_content =~ "      gettext_mapper"
+    end
+
     test "handles files with parsing errors gracefully" do
       test_file = "test_sync_error.ex"
 

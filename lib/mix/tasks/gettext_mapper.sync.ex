@@ -218,8 +218,11 @@ defmodule Mix.Tasks.GettextMapper.Sync do
             macro_name
           )
 
+        # Preserve the original indentation
+        indented_replacement = apply_original_indentation(raw_match, replacement)
+
         # Replace in content
-        String.replace(content, raw_match, replacement, global: false)
+        String.replace(content, raw_match, indented_replacement, global: false)
       else
         content
       end
@@ -317,5 +320,34 @@ defmodule Mix.Tasks.GettextMapper.Sync do
         Mix.shell().info("  + #{updated_line}")
       end
     end)
+  end
+
+  defp apply_original_indentation(original, replacement) do
+    # Detect the indentation of the first line of the original
+    original_first_line = original |> String.split("\n") |> List.first() || ""
+    base_indent = get_leading_whitespace(original_first_line)
+
+    # Apply the base indentation to all lines of the replacement
+    replacement
+    |> String.split("\n")
+    |> Enum.with_index()
+    |> Enum.map(fn {line, index} ->
+      if index == 0 do
+        # First line gets the base indentation
+        base_indent <> String.trim_leading(line)
+      else
+        # Subsequent lines: preserve their relative indentation from formatter
+        # but add the base indentation
+        base_indent <> line
+      end
+    end)
+    |> Enum.join("\n")
+  end
+
+  defp get_leading_whitespace(string) do
+    case Regex.run(~r/^(\s*)/, string) do
+      [_, whitespace] -> whitespace
+      _ -> ""
+    end
   end
 end
