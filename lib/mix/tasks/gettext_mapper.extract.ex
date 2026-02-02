@@ -68,6 +68,9 @@ defmodule Mix.Tasks.GettextMapper.Extract do
 
   use Mix.Task
 
+  alias GettextMapper.CodeParser
+  alias GettextMapper.GettextAPI
+
   @impl Mix.Task
   def run(args) do
     Mix.Task.run("compile")
@@ -80,8 +83,8 @@ defmodule Mix.Tasks.GettextMapper.Extract do
       )
 
     dry_run = Keyword.get(opts, :dry_run, false)
-    backend = get_backend(opts)
-    priv_dir = Keyword.get(opts, :priv, "priv/gettext")
+    backend = GettextAPI.get_backend(opts)
+    priv_dir = Keyword.get(opts, :priv) || GettextAPI.priv_dir(backend)
 
     files_to_process =
       if Enum.empty?(paths) do
@@ -94,7 +97,7 @@ defmodule Mix.Tasks.GettextMapper.Extract do
       Mix.shell().info("Running in dry-run mode. No .po files will be modified.")
     end
 
-    # Collect all translation maps from files
+    # Collect all translation maps from files using AST parsing
     all_translations = collect_translation_maps(files_to_process)
 
     if Enum.empty?(all_translations) do
@@ -105,27 +108,6 @@ defmodule Mix.Tasks.GettextMapper.Extract do
 
       count = length(all_translations)
       Mix.shell().info("Processed #{count} translation maps and updated .po files.")
-    end
-  end
-
-  defp get_backend(opts) do
-    case Keyword.get(opts, :backend) do
-      nil ->
-        try do
-          GettextMapper.GettextAPI.gettext_module()
-        rescue
-          _error ->
-            if File.exists?("test/test_helper.exs") do
-              Code.require_file("test/test_helper.exs")
-              GettextMapper.GettextAPI.gettext_module()
-            else
-              reraise "No gettext backend configured. Use --backend YourApp.Gettext",
-                      __STACKTRACE__
-            end
-        end
-
-      backend_string ->
-        String.to_existing_atom(backend_string)
     end
   end
 
@@ -142,7 +124,18 @@ defmodule Mix.Tasks.GettextMapper.Extract do
   defp extract_maps_from_file(file_path) do
     try do
       content = File.read!(file_path)
-      extract_maps_from_content(content, file_path)
+
+      # Use AST-based parsing
+      calls = CodeParser.find_gettext_mapper_calls(content)
+
+      Enum.map(calls, fn call_info ->
+        %{
+          translations: call_info.translations,
+          domain: call_info.domain || GettextAPI.default_domain(),
+          msgid: call_info.msgid,
+          source: "#{file_path}:#{call_info.line}"
+        }
+      end)
     rescue
       error ->
         Mix.shell().error("Error reading #{file_path}: #{Exception.message(error)}")
@@ -150,179 +143,15 @@ defmodule Mix.Tasks.GettextMapper.Extract do
     end
   end
 
-  defp extract_maps_from_content(content, file_path) do
-    # First extract module-level domain if present
-    module_domain = extract_module_domain(content)
-
-    # Regex to find gettext_mapper calls with static maps, optionally with domain and/or msgid
-    # Captures: 1=map_content, 2=first_opt_key, 3=first_opt_value, 4=second_opt_key, 5=second_opt_value
-    regex =
-      ~r/gettext_mapper\(\s*%\{([^}]+)\}\s*(?:,\s*(domain|msgid):\s*"([^"]+)")?(?:,\s*(domain|msgid):\s*"([^"]+)")?\s*\)/s
-
-    Regex.scan(regex, content, capture: :all)
-    |> Enum.with_index()
-    |> Enum.flat_map(fn {captures, index} ->
-      full_match = Enum.at(captures, 0, "")
-      map_content = Enum.at(captures, 1, "")
-      opt1_key = Enum.at(captures, 2, "")
-      opt1_val = Enum.at(captures, 3, "")
-      opt2_key = Enum.at(captures, 4, "")
-      opt2_val = Enum.at(captures, 5, "")
-
-      # Check if this match is in a comment
-      if comment_text?(content, full_match) do
-        # Skip matches that are in comments
-        []
-      else
-        # Parse options from captured groups
-        opts = parse_options(opt1_key, opt1_val, opt2_key, opt2_val)
-
-        # Determine domain priority: call-level > module-level > default
-        domain =
-          cond do
-            Map.has_key?(opts, "domain") -> Map.get(opts, "domain")
-            module_domain != nil -> module_domain
-            true -> GettextMapper.GettextAPI.default_domain()
-          end
-
-        custom_msgid = Map.get(opts, "msgid")
-
-        case parse_translation_map(map_content) do
-          {:ok, translations} ->
-            [{translations, domain, custom_msgid, "#{file_path}:#{index + 1}"}]
-
-          :error ->
-            Mix.shell().warn(
-              "Could not parse translation map in #{file_path} at position #{index + 1}"
-            )
-
-            []
-        end
-      end
-    end)
-  end
-
-  defp parse_options(key1, val1, key2, val2) do
-    opts = %{}
-
-    opts =
-      if key1 != "" and val1 != "" do
-        Map.put(opts, key1, val1)
-      else
-        opts
-      end
-
-    if key2 != "" and val2 != "" do
-      Map.put(opts, key2, val2)
-    else
-      opts
-    end
-  end
-
-  defp comment_text?(content, match_text) do
-    # Find the position of this match in the content
-    case :binary.match(content, match_text) do
-      {pos, _len} ->
-        comment_by_position?(content, pos)
-
-      :nomatch ->
-        false
-    end
-  end
-
-  defp comment_by_position?(content, pos) do
-    # Check if this position is in a line comment, @moduledoc, or @doc section
-    line_comment?(content, pos) or doc_section?(content, pos)
-  end
-
-  defp line_comment?(content, pos) do
-    # Check if there's a # character before this position in the same line
-    content_before_match = String.slice(content, 0, pos)
-
-    # Find the last newline before the match
-    last_newline_pos =
-      content_before_match
-      |> String.reverse()
-      |> :binary.match("\n")
-      |> case do
-        {reverse_pos, _} -> pos - reverse_pos - 1
-        :nomatch -> 0
-      end
-
-    line_before_match =
-      String.slice(content_before_match, last_newline_pos, pos - last_newline_pos)
-
-    # Check if there's a # in the line before the match
-    String.contains?(line_before_match, "#")
-  end
-
-  defp doc_section?(content, pos) do
-    # Check if the match is inside @moduledoc """ or @doc """ blocks
-    content_before_match = String.slice(content, 0, pos)
-
-    # Find all doc block starts (either @doc """ or @moduledoc """)
-    doc_starts =
-      (Regex.scan(~r/@doc\s+"""/, content_before_match, return: :index) ++
-         Regex.scan(~r/@moduledoc\s+"""/, content_before_match, return: :index))
-      |> Enum.map(fn [{start, _}] -> start end)
-      |> Enum.sort()
-
-    # Find all standalone """ that are not part of @doc or @moduledoc
-    all_triple_quotes =
-      Regex.scan(~r/"""/, content_before_match, return: :index)
-      |> Enum.map(fn [{start, _}] -> start end)
-      |> Enum.sort()
-
-    # Filter out the """ that are part of @doc/@moduledoc declarations
-    doc_ends =
-      Enum.reject(all_triple_quotes, fn quote_pos ->
-        # Check if this """ is preceded by @doc or @moduledoc on the same or previous lines
-        Enum.any?(doc_starts, fn doc_start ->
-          # Rough heuristic for same declaration
-          abs(quote_pos - doc_start) < 50
-        end)
-      end)
-
-    # Count how many doc blocks are currently open
-    open_blocks = length(doc_starts) - length(doc_ends)
-
-    # If we have more opening doc blocks than closing """, we're inside a doc block
-    open_blocks > 0
-  end
-
-  defp parse_translation_map(map_string) do
-    try do
-      # Clean up the map string
-      cleaned =
-        map_string
-        |> String.replace(~r/\s+/, " ")
-        |> String.trim()
-
-      # Parse key-value pairs
-      pairs = Regex.scan(~r/"([^"]+)"\s*=>\s*"([^"]*)"/, cleaned)
-
-      translations =
-        Enum.into(pairs, %{}, fn [_, key, value] ->
-          {key, value}
-        end)
-
-      if map_size(translations) > 0 do
-        {:ok, translations}
-      else
-        :error
-      end
-    rescue
-      _ -> :error
-    end
-  end
-
   defp populate_po_files(translation_maps, backend, priv_dir, dry_run) do
     # Get default locale to use as msgid source
-    default_locale = get_default_locale(backend)
+    default_locale = GettextAPI.default_locale_for(backend)
 
     # Group by msgid and domain
     grouped_by_msgid_and_domain =
-      Enum.reduce(translation_maps, %{}, fn {translations, domain, custom_msgid, source}, acc ->
+      Enum.reduce(translation_maps, %{}, fn entry, acc ->
+        %{translations: translations, domain: domain, msgid: custom_msgid} = entry
+
         # Use custom msgid if provided, otherwise use default locale message
         msgid = custom_msgid || Map.get(translations, default_locale)
 
@@ -333,7 +162,7 @@ defmodule Mix.Tasks.GettextMapper.Extract do
           msgid ->
             key = {msgid, domain}
             existing = Map.get(acc, key, [])
-            Map.put(acc, key, [{translations, source} | existing])
+            Map.put(acc, key, [{translations, entry.source} | existing])
         end
       end)
 
@@ -369,7 +198,7 @@ defmodule Mix.Tasks.GettextMapper.Extract do
   end
 
   defp update_pot_file(priv_dir, domain, msgids, dry_run) do
-    default_domain = GettextMapper.GettextAPI.default_domain()
+    default_domain = GettextAPI.default_domain()
     pot_filename = if domain == default_domain, do: "#{default_domain}.pot", else: "#{domain}.pot"
     pot_file_path = Path.join(priv_dir, pot_filename)
 
@@ -409,7 +238,7 @@ defmodule Mix.Tasks.GettextMapper.Extract do
 
     unless Regex.match?(msgid_pattern, content) do
       # Add new msgid with empty msgstr
-      new_entry = "\nmsgid \"#{escape_string(msgid)}\"\nmsgstr \"\"\n"
+      new_entry = "\nmsgid \"#{CodeParser.escape_string(msgid)}\"\nmsgstr \"\"\n"
       File.write!(pot_file_path, content <> new_entry)
     end
   end
@@ -421,7 +250,7 @@ defmodule Mix.Tasks.GettextMapper.Extract do
   end
 
   defp update_po_file(priv_dir, locale, domain, msgid, msgstr, dry_run) do
-    default_domain = GettextMapper.GettextAPI.default_domain()
+    default_domain = GettextAPI.default_domain()
     po_filename = if domain == default_domain, do: "#{default_domain}.po", else: "#{domain}.po"
     po_file_path = Path.join([priv_dir, locale, "LC_MESSAGES", po_filename])
 
@@ -461,36 +290,14 @@ defmodule Mix.Tasks.GettextMapper.Extract do
         Regex.replace(
           msgid_pattern,
           content,
-          "msgid \"#{msgid}\"\nmsgstr \"#{escape_string(msgstr)}\""
+          "msgid \"#{msgid}\"\nmsgstr \"#{CodeParser.escape_string(msgstr)}\""
         )
 
       File.write!(po_file_path, updated_content)
     else
       # Add new translation
-      new_entry = "\nmsgid \"#{msgid}\"\nmsgstr \"#{escape_string(msgstr)}\"\n"
+      new_entry = "\nmsgid \"#{msgid}\"\nmsgstr \"#{CodeParser.escape_string(msgstr)}\"\n"
       File.write!(po_file_path, content <> new_entry)
-    end
-  end
-
-  defp escape_string(str) do
-    str
-    |> String.replace("\\", "\\\\")
-    |> String.replace("\"", "\\\"")
-  end
-
-  defp extract_module_domain(content) do
-    # Look for `use GettextMapper, domain: "domain_name"`
-    case Regex.run(~r/use\s+GettextMapper\s*,\s*domain:\s*"([^"]+)"/, content) do
-      [_, domain] -> domain
-      _ -> nil
-    end
-  end
-
-  defp get_default_locale(backend) do
-    try do
-      backend.__gettext__(:default_locale)
-    rescue
-      _ -> "en"
     end
   end
 end

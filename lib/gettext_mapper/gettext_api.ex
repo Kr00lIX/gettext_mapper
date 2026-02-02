@@ -119,4 +119,90 @@ defmodule GettextMapper.GettextAPI do
           "Please add `config :gettext_mapper, gettext: YourApp.Gettext` to your config files."
       )
   end
+
+  @doc """
+  Returns the Gettext backend module, with optional override from command-line options.
+
+  This function is primarily used by mix tasks to resolve the backend from:
+  1. Explicit `--backend` option (highest priority)
+  2. Application configuration
+  3. Test helper file (fallback for development)
+
+  ## Options
+
+  - `:backend` - String name of the backend module (e.g., "MyApp.Gettext")
+
+  ## Examples
+
+      # Use configured backend
+      iex> GettextMapper.GettextAPI.get_backend([])
+      MyApp.Gettext
+
+      # Override with specific backend
+      iex> GettextMapper.GettextAPI.get_backend(backend: "MyApp.CustomGettext")
+      MyApp.CustomGettext
+  """
+  @spec get_backend(keyword()) :: module()
+  def get_backend(opts \\ []) do
+    case Keyword.get(opts, :backend) do
+      nil ->
+        try do
+          gettext_module()
+        rescue
+          _error ->
+            # Try to load test environment as fallback
+            if File.exists?("test/test_helper.exs") do
+              Code.require_file("test/test_helper.exs")
+              gettext_module()
+            else
+              reraise "No gettext backend configured. Use --backend YourApp.Gettext or configure :gettext_mapper, :gettext",
+                      __STACKTRACE__
+            end
+        end
+
+      backend_string when is_binary(backend_string) ->
+        String.to_existing_atom(backend_string)
+
+      backend when is_atom(backend) ->
+        backend
+    end
+  end
+
+  @doc """
+  Returns the priv directory path for the given backend.
+
+  Falls back to "priv/gettext" if the backend doesn't specify a custom path.
+
+  ## Examples
+
+      iex> GettextMapper.GettextAPI.priv_dir(MyApp.Gettext)
+      "priv/gettext"
+  """
+  @spec priv_dir(module()) :: String.t()
+  def priv_dir(backend) do
+    try do
+      backend.__gettext__(:priv)
+    rescue
+      _ -> "priv/gettext"
+    end
+  end
+
+  @doc """
+  Returns the default locale for the given backend.
+
+  Falls back to "en" if the backend doesn't specify a default locale.
+
+  ## Examples
+
+      iex> GettextMapper.GettextAPI.default_locale_for(MyApp.Gettext)
+      "en"
+  """
+  @spec default_locale_for(module()) :: String.t()
+  def default_locale_for(backend) do
+    try do
+      backend.__gettext__(:default_locale)
+    rescue
+      _ -> "en"
+    end
+  end
 end
