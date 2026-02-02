@@ -266,14 +266,17 @@ defmodule GettextMapper.CodeParser do
           case parse_ast_pairs(pairs) do
             {:ok, translations} ->
               opts = parse_ast_options(opts_ast)
-              domain = Map.get(opts, :domain) || module_domain
+              # Track call-level domain separately from effective domain
+              call_domain = Map.get(opts, :domain)
+              effective_domain = call_domain || module_domain
               msgid = Map.get(opts, :msgid)
               raw_match = extract_call_source(content, line)
 
               call_info = %{
                 line: line,
                 translations: translations,
-                domain: domain,
+                domain: effective_domain,
+                call_domain: call_domain,
                 msgid: msgid,
                 raw_match: raw_match,
                 macro: :gettext_mapper
@@ -292,14 +295,17 @@ defmodule GettextMapper.CodeParser do
           case parse_ast_pairs(pairs) do
             {:ok, translations} ->
               opts = parse_ast_options(opts_ast)
-              domain = Map.get(opts, :domain) || module_domain
+              # Track call-level domain separately from effective domain
+              call_domain = Map.get(opts, :domain)
+              effective_domain = call_domain || module_domain
               msgid = Map.get(opts, :msgid)
               raw_match = extract_call_source(content, line)
 
               call_info = %{
                 line: line,
                 translations: translations,
-                domain: domain,
+                domain: effective_domain,
+                call_domain: call_domain,
                 msgid: msgid,
                 raw_match: raw_match,
                 macro: :lgettext_mapper

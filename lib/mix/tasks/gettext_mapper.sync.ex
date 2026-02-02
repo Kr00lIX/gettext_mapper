@@ -109,7 +109,8 @@ defmodule Mix.Tasks.GettextMapper.Sync do
   defp generate_single_translation_map(message, backend) do
     try do
       default_domain = GettextAPI.default_domain()
-      translation_map = generate_translation_map(message, backend, default_domain)
+      # Pass empty map as original - use message as fallback for missing translations
+      translation_map = generate_translation_map(message, backend, default_domain, %{})
 
       Mix.shell().info("Original message: \"#{message}\"")
       Mix.shell().info("Updated translation map:")
@@ -178,11 +179,14 @@ defmodule Mix.Tasks.GettextMapper.Sync do
 
   defp process_call(call_info, content, backend) do
     %{
-      translations: translations,
-      domain: domain,
+      translations: original_translations,
+      domain: effective_domain,
       msgid: custom_msgid,
       raw_match: raw_match
     } = call_info
+
+    # Get call-level domain (only this should be in output, not module-level domain)
+    call_domain = Map.get(call_info, :call_domain)
 
     # Get the macro name (defaults to :gettext_mapper for backwards compatibility)
     macro_name = Map.get(call_info, :macro, :gettext_mapper)
@@ -191,23 +195,25 @@ defmodule Mix.Tasks.GettextMapper.Sync do
     if is_nil(raw_match) do
       content
     else
-      # Determine domain to use
-      effective_domain = domain || GettextAPI.default_domain()
+      # Determine domain to use for lookup
+      lookup_domain = effective_domain || GettextAPI.default_domain()
 
       # Determine which msgid to use for lookup
       default_locale = GettextAPI.default_locale_for(backend)
-      default_message = Map.get(translations, default_locale)
-      lookup_msgid = custom_msgid || default_message || Map.get(translations, "en")
+      default_message = Map.get(original_translations, default_locale)
+      lookup_msgid = custom_msgid || default_message || Map.get(original_translations, "en")
 
       if lookup_msgid do
-        # Generate updated translations from .po files
-        updated_translations = generate_translation_map(lookup_msgid, backend, effective_domain)
+        # Generate updated translations from .po files, with fallback to original
+        updated_translations =
+          generate_translation_map(lookup_msgid, backend, lookup_domain, original_translations)
 
         # Format the replacement call, preserving the original macro name
+        # Use call_domain (not effective_domain) to only output explicitly specified domain
         replacement =
           CodeParser.format_gettext_mapper_call(
             updated_translations,
-            domain,
+            call_domain,
             custom_msgid,
             macro_name
           )
@@ -220,12 +226,21 @@ defmodule Mix.Tasks.GettextMapper.Sync do
     end
   end
 
-  defp generate_translation_map(message, backend, domain) do
+  defp generate_translation_map(message, backend, domain, original_translations) do
     # Discover locales from .po files and read translations directly
     known_locales = discover_locales_from_po_files(backend, domain)
 
     Enum.into(known_locales, %{}, fn locale ->
-      translation = lookup_translation_in_po(backend, locale, domain, message)
+      po_translation = lookup_translation_in_po(backend, locale, domain, message)
+
+      # Use .po translation if non-empty, otherwise fall back to original
+      translation =
+        if po_translation != nil and po_translation != "" do
+          po_translation
+        else
+          Map.get(original_translations, locale, message)
+        end
+
       {locale, translation}
     end)
   end

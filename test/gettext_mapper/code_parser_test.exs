@@ -99,6 +99,8 @@ defmodule GettextMapper.CodeParserTest do
       [call] = CodeParser.find_gettext_mapper_calls(content)
 
       assert call.domain == "admin"
+      # call_domain should be nil since domain was not specified in the call
+      assert call.call_domain == nil
     end
 
     test "call-level domain overrides module-level domain" do
@@ -111,6 +113,9 @@ defmodule GettextMapper.CodeParserTest do
       """
 
       [call] = CodeParser.find_gettext_mapper_calls(content)
+
+      # call_domain should be "custom" since it was explicitly specified
+      assert call.call_domain == "custom"
 
       assert call.domain == "custom"
     end
