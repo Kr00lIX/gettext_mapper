@@ -34,8 +34,10 @@ defmodule GettextMapper.DomainTest do
   end
 
   setup do
-    # Set test locale
+    # Save and restore locale
+    original_locale = Gettext.get_locale(MyGettextApp)
     Gettext.put_locale(MyGettextApp, "en")
+    on_exit(fn -> Gettext.put_locale(MyGettextApp, original_locale) end)
     :ok
   end
 

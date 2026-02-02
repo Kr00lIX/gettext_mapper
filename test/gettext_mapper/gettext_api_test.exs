@@ -1,6 +1,7 @@
 defmodule GettextMapper.GettextAPITest do
   # Use async: false because some tests modify global Application config
   use ExUnit.Case, async: false
+  import GettextMapper.TestHelpers
 
   alias GettextMapper.GettextAPI
 
@@ -52,17 +53,13 @@ defmodule GettextMapper.GettextAPITest do
     end
 
     test "locale changes affect locale/0 return value" do
-      original_locale = GettextAPI.locale()
-
-      try do
-        Gettext.put_locale(MyGettextApp, "de")
+      with_locale(MyGettextApp, "de", fn ->
         assert GettextAPI.locale() == "de"
+      end)
 
-        Gettext.put_locale(MyGettextApp, "uk")
+      with_locale(MyGettextApp, "uk", fn ->
         assert GettextAPI.locale() == "uk"
-      after
-        Gettext.put_locale(MyGettextApp, original_locale)
-      end
+      end)
     end
 
     test "functions work with different backend configurations" do

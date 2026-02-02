@@ -9,14 +9,19 @@ defmodule BackendOptionTest do
     def __gettext__(:default_domain), do: "default"
   end
 
-  test "module with backend option compiles successfully" do
-    # Store original supported_locales to restore later
-    original_supported_locales = Application.get_env(:gettext_mapper, :supported_locales)
+  # Store and restore supported_locales for all tests in this module
+  setup do
+    original = Application.get_env(:gettext_mapper, :supported_locales)
+    on_exit(fn -> restore_config(original) end)
+    {:ok, original_locales: original}
+  end
 
-    # Set supported locales that match our test data
+  defp restore_config(nil), do: Application.delete_env(:gettext_mapper, :supported_locales)
+  defp restore_config(value), do: Application.put_env(:gettext_mapper, :supported_locales, value)
+
+  test "module with backend option compiles successfully" do
     Application.put_env(:gettext_mapper, :supported_locales, ["en"])
 
-    # Test that using GettextMapper with backend option works
     defmodule TestModuleWithBackend do
       use GettextMapper, backend: BackendOptionTest.TestBackend
 
@@ -25,20 +30,10 @@ defmodule BackendOptionTest do
       end
     end
 
-    # Should compile and execute without errors
     assert %{"en" => "Test Message"} == TestModuleWithBackend.test_function()
-
-    # Restore original configuration
-    if original_supported_locales do
-      Application.put_env(:gettext_mapper, :supported_locales, original_supported_locales)
-    else
-      Application.delete_env(:gettext_mapper, :supported_locales)
-    end
   end
 
   test "module with both backend and domain options compiles successfully" do
-    # Store original supported_locales to restore later
-    original_supported_locales = Application.get_env(:gettext_mapper, :supported_locales)
     Application.put_env(:gettext_mapper, :supported_locales, ["en"])
 
     defmodule TestModuleWithBoth do
@@ -49,20 +44,10 @@ defmodule BackendOptionTest do
       end
     end
 
-    # Should compile and execute without errors
     assert %{"en" => "Test Message"} == TestModuleWithBoth.test_function()
-
-    # Restore original configuration
-    if original_supported_locales do
-      Application.put_env(:gettext_mapper, :supported_locales, original_supported_locales)
-    else
-      Application.delete_env(:gettext_mapper, :supported_locales)
-    end
   end
 
   test "module without backend option uses global config" do
-    # Store original supported_locales to restore later
-    original_supported_locales = Application.get_env(:gettext_mapper, :supported_locales)
     Application.put_env(:gettext_mapper, :supported_locales, ["en"])
 
     defmodule TestModuleWithoutBackend do
@@ -73,24 +58,11 @@ defmodule BackendOptionTest do
       end
     end
 
-    # Should compile and execute without errors using global backend
     assert %{"en" => "Test Message"} == TestModuleWithoutBackend.test_function()
-
-    # Restore original configuration
-    if original_supported_locales do
-      Application.put_env(:gettext_mapper, :supported_locales, original_supported_locales)
-    else
-      Application.delete_env(:gettext_mapper, :supported_locales)
-    end
   end
 
   test "backend option is correctly applied in macro expansion" do
-    # Store original supported_locales to restore later
-    original_supported_locales = Application.get_env(:gettext_mapper, :supported_locales)
     Application.put_env(:gettext_mapper, :supported_locales, ["en"])
-
-    # We can test this indirectly by ensuring the compilation succeeds
-    # and the backend is used for gettext operations
 
     defmodule TestBackendUsage do
       use GettextMapper, backend: BackendOptionTest.TestBackend
@@ -100,23 +72,14 @@ defmodule BackendOptionTest do
       end
     end
 
-    # The fact that this compiles and runs means the backend option is working
     result = TestBackendUsage.test_message()
     assert is_map(result)
     assert result["en"] == "Backend Test"
-
-    # Restore original configuration
-    if original_supported_locales do
-      Application.put_env(:gettext_mapper, :supported_locales, original_supported_locales)
-    else
-      Application.delete_env(:gettext_mapper, :supported_locales)
-    end
   end
 
   test "backend attribute is accessible in macro expansion" do
-    # This test uses a custom macro to verify the backend attribute is set correctly
     defmodule TestMacroAccess do
-      defmacro check_backend_attribute() do
+      defmacro check_backend_attribute do
         backend = Module.get_attribute(__CALLER__.module, :__gettext_backend__)
 
         quote do
@@ -125,8 +88,6 @@ defmodule BackendOptionTest do
       end
     end
 
-    # Store original supported_locales to restore later
-    original_supported_locales = Application.get_env(:gettext_mapper, :supported_locales)
     Application.put_env(:gettext_mapper, :supported_locales, ["en"])
 
     defmodule TestBackendAttribute do
@@ -142,25 +103,11 @@ defmodule BackendOptionTest do
       end
     end
 
-    # Verify the backend attribute is correctly set and accessible
     assert TestBackendAttribute.get_backend_from_attribute() == BackendOptionTest.TestBackend
-
-    # Verify functionality still works
     assert %{"en" => "Test"} == TestBackendAttribute.test_function()
-
-    # Restore original configuration
-    if original_supported_locales do
-      Application.put_env(:gettext_mapper, :supported_locales, original_supported_locales)
-    else
-      Application.delete_env(:gettext_mapper, :supported_locales)
-    end
   end
 
   test "backend option works with translation validation" do
-    # Store original supported_locales to restore later
-    original_supported_locales = Application.get_env(:gettext_mapper, :supported_locales)
-
-    # Set custom supported locales for this test
     Application.put_env(:gettext_mapper, :supported_locales, ["en", "test_locale"])
 
     defmodule TestValidationWithBackend do
@@ -171,25 +118,15 @@ defmodule BackendOptionTest do
       end
 
       def invalid_translation do
-        # This should raise due to missing required locale
         gettext_mapper(%{"en" => "Hello"})
       end
     end
 
-    # Valid translation should work
     assert %{"en" => "Hello", "test_locale" => "Test"} ==
              TestValidationWithBackend.valid_translation()
 
-    # Invalid translation should raise validation error
     assert_raise ArgumentError, ~r/missing required locales/, fn ->
       TestValidationWithBackend.invalid_translation()
-    end
-
-    # Restore original configuration
-    if original_supported_locales do
-      Application.put_env(:gettext_mapper, :supported_locales, original_supported_locales)
-    else
-      Application.delete_env(:gettext_mapper, :supported_locales)
     end
   end
 end
