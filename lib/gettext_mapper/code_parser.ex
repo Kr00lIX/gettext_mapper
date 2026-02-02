@@ -151,7 +151,7 @@ defmodule GettextMapper.CodeParser do
   end
 
   @doc """
-  Generates a formatted gettext_mapper call string from translations and options.
+  Generates a formatted gettext_mapper or lgettext_mapper call string from translations and options.
 
   Uses Elixir's Code.format_string!/2 for consistent formatting. Translations
   are sorted alphabetically by locale for consistent output.
@@ -161,6 +161,7 @@ defmodule GettextMapper.CodeParser do
   - `translations` - Map of locale => translation string
   - `domain` - Optional domain (nil uses default, non-default domains are included)
   - `custom_msgid` - Optional custom message ID for stable translation keys
+  - `macro_name` - The macro name to use (`:gettext_mapper` or `:lgettext_mapper`), defaults to `:gettext_mapper`
 
   ## Examples
 
@@ -177,9 +178,13 @@ defmodule GettextMapper.CodeParser do
       # With custom msgid
       iex> GettextMapper.CodeParser.format_gettext_mapper_call(%{"en" => "Hello"}, nil, "greeting.hello")
       "gettext_mapper(%{\\"en\\" => \\"Hello\\"}, msgid: \\"greeting.hello\\")"
+
+      # With lgettext_mapper macro
+      iex> GettextMapper.CodeParser.format_gettext_mapper_call(%{"en" => "Hello"}, nil, nil, :lgettext_mapper)
+      "lgettext_mapper(%{\\"en\\" => \\"Hello\\"})"
   """
-  @spec format_gettext_mapper_call(map(), String.t() | nil, String.t() | nil) :: String.t()
-  def format_gettext_mapper_call(translations, domain, custom_msgid) do
+  @spec format_gettext_mapper_call(map(), String.t() | nil, String.t() | nil, atom()) :: String.t()
+  def format_gettext_mapper_call(translations, domain, custom_msgid, macro_name \\ :gettext_mapper) do
     default_domain = GettextMapper.GettextAPI.default_domain()
 
     # Create entries for the map
@@ -197,11 +202,13 @@ defmodule GettextMapper.CodeParser do
     opts = Enum.reverse(opts)
 
     # Build the call
+    macro_str = Atom.to_string(macro_name)
+
     unformatted =
       if Enum.empty?(opts) do
-        "gettext_mapper(%{#{Enum.join(entries, ", ")}})"
+        "#{macro_str}(%{#{Enum.join(entries, ", ")}})"
       else
-        "gettext_mapper(%{#{Enum.join(entries, ", ")}}, #{Enum.join(opts, ", ")})"
+        "#{macro_str}(%{#{Enum.join(entries, ", ")}}, #{Enum.join(opts, ", ")})"
       end
 
     # Format using Elixir's formatter
@@ -268,7 +275,8 @@ defmodule GettextMapper.CodeParser do
                 translations: translations,
                 domain: domain,
                 msgid: msgid,
-                raw_match: raw_match
+                raw_match: raw_match,
+                macro: :gettext_mapper
               }
 
               {node, [call_info | acc]}

@@ -15,6 +15,7 @@ defmodule GettextMapper.CodeParserTest do
       assert call.domain == nil
       assert call.msgid == nil
       assert call.line == 1
+      assert call.macro == :gettext_mapper
     end
 
     test "finds gettext_mapper call with domain option" do
@@ -340,6 +341,23 @@ defmodule GettextMapper.CodeParserTest do
       result = CodeParser.format_gettext_mapper_call(translations, "default", nil)
 
       refute String.contains?(result, "domain:")
+    end
+
+    test "formats lgettext_mapper call when macro_name is :lgettext_mapper" do
+      translations = %{"en" => "Hello", "de" => "Hallo"}
+
+      result = CodeParser.format_gettext_mapper_call(translations, nil, nil, :lgettext_mapper)
+
+      assert String.starts_with?(result, "lgettext_mapper")
+      refute String.starts_with?(result, "gettext_mapper")
+    end
+
+    test "formats gettext_mapper call by default" do
+      translations = %{"en" => "Hello"}
+
+      result = CodeParser.format_gettext_mapper_call(translations, nil, nil)
+
+      assert String.starts_with?(result, "gettext_mapper")
     end
   end
 

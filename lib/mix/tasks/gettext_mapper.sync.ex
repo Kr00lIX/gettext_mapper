@@ -184,6 +184,9 @@ defmodule Mix.Tasks.GettextMapper.Sync do
       raw_match: raw_match
     } = call_info
 
+    # Get the macro name (defaults to :gettext_mapper for backwards compatibility)
+    macro_name = Map.get(call_info, :macro, :gettext_mapper)
+
     # Skip if we couldn't extract the raw match
     if is_nil(raw_match) do
       content
@@ -200,12 +203,13 @@ defmodule Mix.Tasks.GettextMapper.Sync do
         # Generate updated translations from .po files
         updated_translations = generate_translation_map(lookup_msgid, backend, effective_domain)
 
-        # Format the replacement call
+        # Format the replacement call, preserving the original macro name
         replacement =
           CodeParser.format_gettext_mapper_call(
             updated_translations,
             domain,
-            custom_msgid
+            custom_msgid,
+            macro_name
           )
 
         # Replace in content
