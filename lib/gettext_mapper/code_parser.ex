@@ -153,8 +153,7 @@ defmodule GettextMapper.CodeParser do
   @doc """
   Generates a formatted gettext_mapper or lgettext_mapper call string from translations and options.
 
-  Uses Elixir's Code.format_string!/2 for consistent formatting. Translations
-  are sorted alphabetically by locale for consistent output.
+  Uses Elixir's Code.format_string!/2 for consistent formatting.
 
   ## Parameters
 
@@ -162,6 +161,7 @@ defmodule GettextMapper.CodeParser do
   - `domain` - Optional domain (nil uses default, non-default domains are included)
   - `custom_msgid` - Optional custom message ID for stable translation keys
   - `macro_name` - The macro name to use (`:gettext_mapper` or `:lgettext_mapper`), defaults to `:gettext_mapper`
+  - `locale_order` - Optional list of locales specifying the output order. If nil, sorts alphabetically.
 
   ## Examples
 
@@ -182,16 +182,38 @@ defmodule GettextMapper.CodeParser do
       # With lgettext_mapper macro
       iex> GettextMapper.CodeParser.format_gettext_mapper_call(%{"en" => "Hello"}, nil, nil, :lgettext_mapper)
       "lgettext_mapper(%{\\"en\\" => \\"Hello\\"})"
+
+      # With preserved locale order
+      iex> GettextMapper.CodeParser.format_gettext_mapper_call(%{"en" => "Hello", "de" => "Hallo"}, nil, nil, :gettext_mapper, ["en", "de"])
+      "gettext_mapper(%{\\"en\\" => \\"Hello\\", \\"de\\" => \\"Hallo\\"})"
   """
-  @spec format_gettext_mapper_call(map(), String.t() | nil, String.t() | nil, atom()) :: String.t()
-  def format_gettext_mapper_call(translations, domain, custom_msgid, macro_name \\ :gettext_mapper) do
+  @spec format_gettext_mapper_call(map(), String.t() | nil, String.t() | nil, atom(), list() | nil) ::
+          String.t()
+  def format_gettext_mapper_call(
+        translations,
+        domain,
+        custom_msgid,
+        macro_name \\ :gettext_mapper,
+        locale_order \\ nil
+      ) do
     default_domain = GettextMapper.GettextAPI.default_domain()
 
-    # Create entries for the map
+    # Create entries for the map, preserving order if provided
+    ordered_locales =
+      if locale_order do
+        # Use provided order, then append any new locales alphabetically
+        new_locales = Map.keys(translations) -- locale_order
+        locale_order ++ Enum.sort(new_locales)
+      else
+        # Default: sort alphabetically
+        translations |> Map.keys() |> Enum.sort()
+      end
+
     entries =
-      translations
-      |> Enum.sort_by(fn {locale, _} -> locale end)
-      |> Enum.map(fn {locale, translation} ->
+      ordered_locales
+      |> Enum.filter(&Map.has_key?(translations, &1))
+      |> Enum.map(fn locale ->
+        translation = Map.get(translations, locale)
         ~s("#{locale}" => "#{escape_string(translation)}")
       end)
 
@@ -264,7 +286,7 @@ defmodule GettextMapper.CodeParser do
           line = Keyword.get(meta, :line, 0)
 
           case parse_ast_pairs(pairs) do
-            {:ok, translations} ->
+            {:ok, translations, locale_order} ->
               opts = parse_ast_options(opts_ast)
               # Track call-level domain separately from effective domain
               call_domain = Map.get(opts, :domain)
@@ -275,6 +297,7 @@ defmodule GettextMapper.CodeParser do
               call_info = %{
                 line: line,
                 translations: translations,
+                locale_order: locale_order,
                 domain: effective_domain,
                 call_domain: call_domain,
                 msgid: msgid,
@@ -293,7 +316,7 @@ defmodule GettextMapper.CodeParser do
           line = Keyword.get(meta, :line, 0)
 
           case parse_ast_pairs(pairs) do
-            {:ok, translations} ->
+            {:ok, translations, locale_order} ->
               opts = parse_ast_options(opts_ast)
               # Track call-level domain separately from effective domain
               call_domain = Map.get(opts, :domain)
@@ -304,6 +327,7 @@ defmodule GettextMapper.CodeParser do
               call_info = %{
                 line: line,
                 translations: translations,
+                locale_order: locale_order,
                 domain: effective_domain,
                 call_domain: call_domain,
                 msgid: msgid,
@@ -351,17 +375,18 @@ defmodule GettextMapper.CodeParser do
   defp extract_domain_from_use_opts(_), do: nil
 
   defp parse_ast_pairs(pairs) do
-    translations =
-      Enum.reduce(pairs, %{}, fn
-        {key, value}, acc when is_binary(key) and is_binary(value) ->
-          Map.put(acc, key, value)
+    # Extract translations and preserve original key order
+    {translations, locale_order} =
+      Enum.reduce(pairs, {%{}, []}, fn
+        {key, value}, {map, order} when is_binary(key) and is_binary(value) ->
+          {Map.put(map, key, value), order ++ [key]}
 
         _, acc ->
           acc
       end)
 
     if map_size(translations) > 0 do
-      {:ok, translations}
+      {:ok, translations, locale_order}
     else
       :error
     end

@@ -191,6 +191,9 @@ defmodule Mix.Tasks.GettextMapper.Sync do
     # Get the macro name (defaults to :gettext_mapper for backwards compatibility)
     macro_name = Map.get(call_info, :macro, :gettext_mapper)
 
+    # Get the original locale order to preserve it
+    locale_order = Map.get(call_info, :locale_order)
+
     # Skip if we couldn't extract the raw match
     if is_nil(raw_match) do
       content
@@ -208,14 +211,15 @@ defmodule Mix.Tasks.GettextMapper.Sync do
         updated_translations =
           generate_translation_map(lookup_msgid, backend, lookup_domain, original_translations)
 
-        # Format the replacement call, preserving the original macro name
+        # Format the replacement call, preserving the original macro name and locale order
         # Use call_domain (not effective_domain) to only output explicitly specified domain
         replacement =
           CodeParser.format_gettext_mapper_call(
             updated_translations,
             call_domain,
             custom_msgid,
-            macro_name
+            macro_name,
+            locale_order
           )
 
         # Preserve the original indentation
