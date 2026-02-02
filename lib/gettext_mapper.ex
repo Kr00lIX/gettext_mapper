@@ -247,7 +247,15 @@ defmodule GettextMapper do
 
   Falls back to the default locale, then to the given default value.
 
-  Examples, when the locale is "en" (default) and default fallback locale is "en":
+  ## Parameters
+
+  - `value` - The translations map
+  - `default` - Fallback value if no translation found (default: "")
+  - `locale` - Specific locale to use instead of current locale (default: nil)
+
+  ## Examples
+
+  When the locale is "en" (default) and default fallback locale is "en":
 
     # use current locale
     iex> GettextMapper.localize(%{"en" => "Hello", "de" => "Hallo"}, "missed translation")
@@ -263,14 +271,19 @@ defmodule GettextMapper do
     # use default translation
     iex> GettextMapper.localize(%{"da" => "Hallo", "fr" => "Bonjour"}, "Default")
     "Default"
+
+    # use specific locale
+    iex> GettextMapper.localize(%{"en" => "Hello", "de" => "Hallo"}, "", "de")
+    "Hallo"
   """
-  @spec localize(map() | nil, String.t()) :: String.t()
-  def localize(value, _default \\ "")
+  @spec localize(map() | nil, String.t(), String.t() | nil) :: String.t()
+  def localize(value, default \\ "", locale \\ nil)
 
-  def localize(nil, _default), do: ""
+  def localize(nil, _default, _locale), do: ""
 
-  def localize(value, default) when is_map(value) do
-    value[GettextAPI.locale()] || value[GettextAPI.default_locale()] || default
+  def localize(value, default, locale) when is_map(value) do
+    effective_locale = locale || GettextAPI.locale()
+    value[effective_locale] || value[GettextAPI.default_locale()] || default
   end
 
   @doc """

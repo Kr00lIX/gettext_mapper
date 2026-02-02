@@ -97,6 +97,7 @@ defmodule GettextMapper.Macros do
   - `:domain` - The gettext domain (default: configured default domain)
   - `:msgid` - Custom message ID for stable translation keys
   - `:default` - Fallback value if no translation is found (default: "")
+  - `:locale` - Specific locale to use instead of current locale
 
   ## Examples
 
@@ -116,11 +117,16 @@ defmodule GettextMapper.Macros do
       # With domain
       lgettext_mapper(%{"en" => "Error"}, domain: "errors", msgid: "error.generic")
       #=> "Error" (when locale is "en")
+
+      # With specific locale
+      lgettext_mapper(%{"en" => "Hello", "de" => "Hallo"}, locale: "de")
+      #=> "Hallo" (regardless of current locale)
   """
   defmacro lgettext_mapper(translation_source, opts \\ []) do
     default = Keyword.get(opts, :default, "")
-    # Remove :default from opts as it's not used by gettext_mapper
-    mapper_opts = Keyword.delete(opts, :default)
+    locale = Keyword.get(opts, :locale)
+    # Remove :default and :locale from opts as they're not used by gettext_mapper
+    mapper_opts = opts |> Keyword.delete(:default) |> Keyword.delete(:locale)
 
     # Get domain from opts or module attribute
     domain =
@@ -168,7 +174,7 @@ defmodule GettextMapper.Macros do
       end
 
     quote do
-      GettextMapper.localize(unquote(map_result), unquote(default))
+      GettextMapper.localize(unquote(map_result), unquote(default), unquote(locale))
     end
   end
 

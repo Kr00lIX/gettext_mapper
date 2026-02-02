@@ -198,5 +198,80 @@ defmodule MacrosTest do
       assert module_result["en"] == "Module Domain"
       assert call_result["en"] == "Call Domain"
     end
+
+    test "lgettext_mapper/2 returns localized string for current locale" do
+      defmodule TestLgettextMapper do
+        use GettextMapper
+
+        def greeting do
+          lgettext_mapper(%{"en" => "Hello", "de" => "Hallo", "uk" => "Привіт"})
+        end
+      end
+
+      # Default locale is "en"
+      result = TestLgettextMapper.greeting()
+      assert result == "Hello"
+    end
+
+    test "lgettext_mapper/2 with :locale option returns string for specified locale" do
+      defmodule TestLgettextMapperLocale do
+        use GettextMapper
+
+        def greeting_de do
+          lgettext_mapper(%{"en" => "Hello", "de" => "Hallo", "uk" => "Привіт"}, locale: "de")
+        end
+
+        def greeting_uk do
+          lgettext_mapper(%{"en" => "Hello", "de" => "Hallo", "uk" => "Привіт"}, locale: "uk")
+        end
+
+        def greeting_with_all_opts do
+          lgettext_mapper(
+            %{"en" => "Hello", "de" => "Hallo", "uk" => "Привіт"},
+            locale: "de",
+            default: "No translation",
+            msgid: "greeting.hello"
+          )
+        end
+      end
+
+      assert TestLgettextMapperLocale.greeting_de() == "Hallo"
+      assert TestLgettextMapperLocale.greeting_uk() == "Привіт"
+      assert TestLgettextMapperLocale.greeting_with_all_opts() == "Hallo"
+    end
+
+    test "lgettext_mapper/2 with :default option when locale not found" do
+      defmodule TestLgettextMapperDefault do
+        use GettextMapper
+
+        def greeting do
+          lgettext_mapper(%{"en" => "Hello", "de" => "Hallo", "uk" => "Привіт"},
+            locale: "fr",
+            default: "No translation"
+          )
+        end
+      end
+
+      # "fr" is not in the map, falls back to default locale "en"
+      result = TestLgettextMapperDefault.greeting()
+      assert result == "Hello"
+    end
+
+    test "lgettext_mapper/2 with unknown locale falls back to default locale" do
+      defmodule TestLgettextMapperFallback do
+        use GettextMapper
+
+        def greeting do
+          lgettext_mapper(%{"en" => "Hello", "de" => "Hallo", "uk" => "Привіт"},
+            locale: "fr",
+            default: "No translation"
+          )
+        end
+      end
+
+      # "fr" not in map, falls back to default locale "en"
+      result = TestLgettextMapperFallback.greeting()
+      assert result == "Hello"
+    end
   end
 end
